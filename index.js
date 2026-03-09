@@ -1,6 +1,7 @@
 require("dotenv").config();
-const express = require("express");
-const axios   = require("axios");
+const express  = require("express");
+const axios    = require("axios");
+const nodemailer = require("nodemailer");
 
 const app = express();
 app.use(express.json());
@@ -9,10 +10,22 @@ app.use(express.json());
 // CONFIG
 // ══════════════════════════════════════════════════════════════════════════════
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbzXQghBXgCIm_Kc3lC6g5_VdaBnowQJ1hhoH6iTSXb8B0B7UqLU4r-FJFZ9QTSFIdT8/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbyka_9NNspo0RpNO2I-Tb3UEWQbr61qwkzmGX3YvNwt7YcBPrS9027d-Xu9vPjLiGIE/exec";
 const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
-const RESEND_API_KEY  = process.env.RESEND_API_KEY  || ""; // Ajouter sur Render quand tu as la clé
+const GMAIL_USER      = process.env.GMAIL_USER      || "contact@mohstechnologie.com";
+const GMAIL_PASS      = process.env.GMAIL_PASS      || ""; // Mot de passe d'application Google
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GMAIL SMTP — Transporteur Nodemailer
+// ══════════════════════════════════════════════════════════════════════════════
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: GMAIL_USER,
+    pass: GMAIL_PASS
+  }
+});
 
 // ══════════════════════════════════════════════════════════════════════════════
 // VÉRIFICATION ADMIN
@@ -72,11 +85,11 @@ async function send(chatId, text, extra = {}) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// ENVOI MAIL VIA RESEND
+// ENVOI MAIL VIA GMAIL SMTP
 // ══════════════════════════════════════════════════════════════════════════════
 async function envoyerMailBienvenue({ email, nom, id, pack, montant, plateforme, date_fin, lienPaiement }) {
-  if (!RESEND_API_KEY) {
-    console.log("⚠️ RESEND_API_KEY non configurée — mail non envoyé");
+  if (!GMAIL_PASS) {
+    console.log("⚠️ GMAIL_PASS non configuré — mail non envoyé");
     return false;
   }
 
@@ -86,7 +99,7 @@ async function envoyerMailBienvenue({ email, nom, id, pack, montant, plateforme,
           💳 Payer mon abonnement
         </a>
        </p>`
-    : `<p style="color:#888;font-size:13px;text-align:center;">
+    : `<p style="color:#888;font-size:13px;text-align:center;padding:10px 20px;background:#fff8e1;border-radius:8px;">
         ⏳ Le lien de paiement sera disponible très prochainement. Nous vous contacterons dès son activation.
        </p>`;
 
@@ -129,8 +142,8 @@ async function envoyerMailBienvenue({ email, nom, id, pack, montant, plateforme,
               </tr>
               <tr>
                 <td style="padding:14px 20px;color:#888;font-size:14px;border-bottom:1px solid #eee;width:40%;">🆔 ID Client</td>
-                <td style="padding:14px 20px;color:#1a1a2e;font-weight:bold;font-size:14px;border-bottom:1px solid #eee;">
-                  <span style="background:#1a1a2e;color:#F5A623;padding:4px 12px;border-radius:20px;font-family:monospace;">${id}</span>
+                <td style="padding:14px 20px;border-bottom:1px solid #eee;">
+                  <span style="background:#1a1a2e;color:#F5A623;padding:4px 12px;border-radius:20px;font-family:monospace;font-weight:bold;">${id}</span>
                 </td>
               </tr>
               <tr style="background:#fff;">
@@ -167,7 +180,7 @@ async function envoyerMailBienvenue({ email, nom, id, pack, montant, plateforme,
               Conservez votre <strong>ID Client (${id})</strong> — il vous sera utile pour toute demande de support ou renouvellement.
             </p>
             <p style="color:#555;line-height:1.7;font-size:14px;margin:12px 0 0;">
-              Pour toute question, répondez simplement à cet email. Notre équipe vous répondra dans les plus brefs délais.
+              Pour toute question, contactez-nous à <a href="mailto:contact@mohstechnologie.com" style="color:#F5A623;">contact@mohstechnologie.com</a>
             </p>
           </td>
         </tr>
@@ -188,29 +201,16 @@ async function envoyerMailBienvenue({ email, nom, id, pack, montant, plateforme,
 </html>`;
 
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>",
-        to:   [email],
-        subject: `✅ Bienvenue chez MOHS TECHNOLOGIE — Votre abonnement ${pack}`,
-        html
-      })
+    await transporter.sendMail({
+      from: `"MOHS TECHNOLOGIE" <${GMAIL_USER}>`,
+      to:      email,
+      subject: `✅ Bienvenue chez MOHS TECHNOLOGIE — ${pack}`,
+      html
     });
-    const data = await res.json();
-    if (data.id) {
-      console.log(`✅ Mail envoyé à ${email} (ID: ${data.id})`);
-      return true;
-    } else {
-      console.error("❌ Resend:", JSON.stringify(data));
-      return false;
-    }
+    console.log(`✅ Mail envoyé à ${email}`);
+    return true;
   } catch(e) {
-    console.error("❌ Mail:", e.message);
+    console.error("❌ Gmail SMTP:", e.message);
     return false;
   }
 }
@@ -280,7 +280,7 @@ app.post("/webhook", async (req, res) => {
 
     // 🔒 Accès réservé à l'admin
     if (!isAdmin(chatId)) {
-      await send(chatId, `👋 Bonjour ${prenom} !\n\nBienvenue sur *MOHS TECHNOLOGIE* 🤖\n\nCe service est réservé à un usage interne.\nPour toute demande, contactez-nous : contact@mohstechnologie.com`);
+      await send(chatId, `👋 Bonjour ${prenom} !\n\nBienvenue sur *MOHS TECHNOLOGIE* 🤖\n\nCe service est réservé à un usage interne.\nPour toute demande : contact@mohstechnologie.com`);
       return;
     }
 
@@ -313,9 +313,8 @@ app.post("/webhook", async (req, res) => {
 
       const [, nom, telephone, email, packNum, plateforme = "telegram"] = parts;
 
-      // Vérifier email basique
       if (!email.includes("@")) {
-        await send(chatId, "⚠️ Email invalide. Vérifie le format.\nEx: `paul@gmail.com`");
+        await send(chatId, "⚠️ Email invalide. Ex: `paul@gmail.com`");
         return;
       }
 
@@ -325,43 +324,34 @@ app.post("/webhook", async (req, res) => {
         return;
       }
 
-      // Générer ID unique
       const idClient = genererID();
-
-      await send(chatId, `⏳ Enregistrement de *${nom}* (ID: \`${idClient}\`)...`);
+      await send(chatId, `⏳ Enregistrement de *${nom}* en cours...`);
 
       const montant = plateforme.toLowerCase() === "whatsapp" ? packInfo.whatsapp : packInfo.telegram;
       const result  = await callSheet("add_client", {
-        id: idClient,
-        nom, telephone, email,
+        id: idClient, nom, telephone, email,
         pack: packInfo.nom,
         plateforme: plateforme.charAt(0).toUpperCase() + plateforme.slice(1),
         montant
       });
 
       if (result.status !== "ok") {
-        await send(chatId, `❌ Erreur Google Sheet : ${result.message}`);
+        await send(chatId, `❌ Erreur : ${result.message}`);
         return;
       }
 
-      // Générer lien FedaPay si dispo
       let lienPaiement = null;
-      if (FEDAPAY_API_KEY) {
-        lienPaiement = await genererLienPaiement(idClient, montant, nom, packInfo.nom);
-      }
+      if (FEDAPAY_API_KEY) lienPaiement = await genererLienPaiement(idClient, montant, nom, packInfo.nom);
 
-      // Envoyer mail de bienvenue au client
+      // Envoyer mail de bienvenue
       const mailEnvoye = await envoyerMailBienvenue({
-        email, nom,
-        id: idClient,
-        pack: packInfo.nom,
-        montant,
+        email, nom, id: idClient,
+        pack: packInfo.nom, montant,
         plateforme: plateforme.charAt(0).toUpperCase() + plateforme.slice(1),
         date_fin: result.date_fin,
         lienPaiement
       });
 
-      // Réponse Telegram à toi
       let msg = `✅ *Client enregistré !*\n\n`;
       msg += `🆔 ID : \`${idClient}\`\n`;
       msg += `👤 Nom : ${nom}\n`;
@@ -372,12 +362,10 @@ app.post("/webhook", async (req, res) => {
       msg += `💰 Montant : ${montant.toLocaleString("fr-FR")} FCFA/mois\n`;
       msg += `📅 Valide jusqu'au : *${result.date_fin}*\n\n`;
       msg += mailEnvoye
-        ? `📧 Mail de bienvenue envoyé à ${email} ✅`
-        : `⚠️ Mail non envoyé (RESEND_API_KEY non configurée)`;
+        ? `📧 Mail de bienvenue envoyé ✅`
+        : `⚠️ Mail non envoyé — vérifie GMAIL_PASS sur Render`;
 
-      if (lienPaiement) {
-        msg += `\n\n💳 Lien FedaPay :\n${lienPaiement}`;
-      }
+      if (lienPaiement) msg += `\n\n💳 Lien FedaPay :\n${lienPaiement}`;
 
       await send(chatId, msg);
       return;
@@ -389,8 +377,8 @@ app.post("/webhook", async (req, res) => {
       const result    = await callSheet("get_client", { id: recherche, telephone: recherche });
       if (result.status !== "ok") { await send(chatId, `❌ ${result.message}`); return; }
 
-      const c     = result;
-      const emoji = c.statut === "ACTIF" ? "🟢" : c.statut === "EXPIRÉ" ? "🔴" : "🟡";
+      const c      = result;
+      const emoji  = c.statut === "ACTIF" ? "🟢" : c.statut === "EXPIRÉ" ? "🔴" : "🟡";
       const alertJ = c.jours_restants <= 3 ? "🚨" : c.jours_restants <= 7 ? "⚠️" : "";
 
       let msg = `👤 *Fiche Client*\n\n`;
@@ -405,10 +393,7 @@ app.post("/webhook", async (req, res) => {
       msg += `📅 Début : ${c.date_debut}\n`;
       msg += `📅 Fin : ${c.date_fin}\n`;
       msg += `⏳ Jours restants : *${c.jours_restants}* ${alertJ}\n\n`;
-      msg += `⚙️ Actions :\n`;
-      msg += `• \`renouveler ${c.id}\`\n`;
-      msg += `• \`suspendre ${c.id}\`\n`;
-      msg += `• \`reactiver ${c.id}\``;
+      msg += `⚙️ Actions :\n• \`renouveler ${c.id}\`\n• \`suspendre ${c.id}\`\n• \`reactiver ${c.id}\``;
 
       await send(chatId, msg);
       return;
@@ -419,11 +404,7 @@ app.post("/webhook", async (req, res) => {
       const filtreMap = { "clients": "tous", "actifs": "actifs", "expires": "expires", "alerte": "alerte" };
       const filtre    = filtreMap[text.toLowerCase()];
       const result    = await callSheet("get_clients", { filtre });
-
-      if (result.status !== "ok" || result.total === 0) {
-        await send(chatId, `📋 Aucun client trouvé (filtre: ${filtre}).`);
-        return;
-      }
+      if (result.status !== "ok" || result.total === 0) { await send(chatId, `📋 Aucun client trouvé.`); return; }
 
       let msg = `📋 *Clients — ${filtre.toUpperCase()}* (${result.total})\n\n`;
       result.clients.forEach(c => {
@@ -469,11 +450,7 @@ app.post("/webhook", async (req, res) => {
       const result = await callSheet("get_stats");
       if (result.status !== "ok") { await send(chatId, "⚠️ Erreur stats."); return; }
       let msg = `📊 *MOHS TECHNOLOGIE — Tableau de bord*\n\n`;
-      msg += `👥 *Abonnés :*\n`;
-      msg += `  🟢 Actifs : *${result.actifs}*\n`;
-      msg += `  🔴 Expirés : *${result.expires}*\n`;
-      msg += `  🟡 Suspendus : *${result.suspendus}*\n`;
-      msg += `  📊 Total : *${result.total}*\n\n`;
+      msg += `👥 *Abonnés :*\n  🟢 Actifs : *${result.actifs}*\n  🔴 Expirés : *${result.expires}*\n  🟡 Suspendus : *${result.suspendus}*\n  📊 Total : *${result.total}*\n\n`;
       msg += `💰 *CA Total : ${Number(result.ca_total).toLocaleString("fr-FR")} FCFA*\n\n`;
       msg += `📦 *Par pack :*\n`;
       for (const [pack, v] of Object.entries(result.par_pack || {})) {
