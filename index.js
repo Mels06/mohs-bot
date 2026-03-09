@@ -6,12 +6,32 @@ const app = express();
 app.use(express.json());
 
 // ══════════════════════════════════════════════════════════════════════════════
-// CONFIG — À remplir dans les variables d'environnement Render
+// CONFIG
 // ══════════════════════════════════════════════════════════════════════════════
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbyka_9NNspo0RpNO2I-Tb3UEWQbr61qwkzmGX3YvNwt7YcBPrS9027d-Xu9vPjLiGIE/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbzXQghBXgCIm_Kc3lC6g5_VdaBnowQJ1hhoH6iTSXb8B0B7UqLU4r-FJFZ9QTSFIdT8/exec";
 const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
-const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || ""; // À ajouter demain
+const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
+const RESEND_API_KEY  = process.env.RESEND_API_KEY  || ""; // Ajouter sur Render quand tu as la clé
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VÉRIFICATION ADMIN
+// ══════════════════════════════════════════════════════════════════════════════
+function isAdmin(chatId) {
+  return String(chatId) === String(ADMIN_CHAT_ID);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GÉNÉRATION ID SÉCURISÉ  ex: MT-X7K2P
+// ══════════════════════════════════════════════════════════════════════════════
+function genererID() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 5; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `MT-${code}`;
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // PACKS
@@ -51,48 +71,181 @@ async function send(chatId, text, extra = {}) {
   } catch(e) { console.error("❌ Telegram:", e.message); }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ENVOI MAIL VIA RESEND
+// ══════════════════════════════════════════════════════════════════════════════
+async function envoyerMailBienvenue({ email, nom, id, pack, montant, plateforme, date_fin, lienPaiement }) {
+  if (!RESEND_API_KEY) {
+    console.log("⚠️ RESEND_API_KEY non configurée — mail non envoyé");
+    return false;
+  }
 
+  const lienHtml = lienPaiement
+    ? `<p style="text-align:center;margin:30px 0;">
+        <a href="${lienPaiement}" style="background:#F5A623;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;">
+          💳 Payer mon abonnement
+        </a>
+       </p>`
+    : `<p style="color:#888;font-size:13px;text-align:center;">
+        ⏳ Le lien de paiement sera disponible très prochainement. Nous vous contacterons dès son activation.
+       </p>`;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:40px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+
+        <!-- HEADER -->
+        <tr>
+          <td style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:40px 40px 30px;text-align:center;">
+            <h1 style="color:#F5A623;margin:0;font-size:28px;letter-spacing:2px;">⚙️ MOHS TECHNOLOGIE</h1>
+            <p style="color:#aaa;margin:8px 0 0;font-size:14px;">Solutions Digitales & Bots Intelligents</p>
+          </td>
+        </tr>
+
+        <!-- BIENVENUE -->
+        <tr>
+          <td style="padding:40px 40px 20px;">
+            <h2 style="color:#1a1a2e;margin:0 0 16px;">Bienvenue, ${nom} ! 🎉</h2>
+            <p style="color:#555;line-height:1.7;margin:0 0 16px;">
+              Votre abonnement a bien été enregistré sur la plateforme <strong>MOHS TECHNOLOGIE</strong>. 
+              Voici le récapitulatif de votre souscription :
+            </p>
+          </td>
+        </tr>
+
+        <!-- FICHE CLIENT -->
+        <tr>
+          <td style="padding:0 40px 30px;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9ff;border-radius:10px;border:1px solid #e8eaf6;overflow:hidden;">
+              <tr style="background:#1a1a2e;">
+                <td colspan="2" style="padding:14px 20px;color:#F5A623;font-weight:bold;font-size:14px;letter-spacing:1px;">
+                  📋 DÉTAILS DE VOTRE ABONNEMENT
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;color:#888;font-size:14px;border-bottom:1px solid #eee;width:40%;">🆔 ID Client</td>
+                <td style="padding:14px 20px;color:#1a1a2e;font-weight:bold;font-size:14px;border-bottom:1px solid #eee;">
+                  <span style="background:#1a1a2e;color:#F5A623;padding:4px 12px;border-radius:20px;font-family:monospace;">${id}</span>
+                </td>
+              </tr>
+              <tr style="background:#fff;">
+                <td style="padding:14px 20px;color:#888;font-size:14px;border-bottom:1px solid #eee;">📦 Pack souscrit</td>
+                <td style="padding:14px 20px;color:#1a1a2e;font-weight:bold;font-size:14px;border-bottom:1px solid #eee;">${pack}</td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;color:#888;font-size:14px;border-bottom:1px solid #eee;">📱 Plateforme</td>
+                <td style="padding:14px 20px;color:#1a1a2e;font-size:14px;border-bottom:1px solid #eee;">${plateforme}</td>
+              </tr>
+              <tr style="background:#fff;">
+                <td style="padding:14px 20px;color:#888;font-size:14px;border-bottom:1px solid #eee;">💰 Montant mensuel</td>
+                <td style="padding:14px 20px;color:#F5A623;font-weight:bold;font-size:16px;border-bottom:1px solid #eee;">${Number(montant).toLocaleString("fr-FR")} FCFA</td>
+              </tr>
+              <tr>
+                <td style="padding:14px 20px;color:#888;font-size:14px;">📅 Valide jusqu'au</td>
+                <td style="padding:14px 20px;color:#1a1a2e;font-weight:bold;font-size:14px;">${date_fin}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- BOUTON PAIEMENT -->
+        <tr>
+          <td style="padding:0 40px 30px;">
+            ${lienHtml}
+          </td>
+        </tr>
+
+        <!-- MESSAGE -->
+        <tr>
+          <td style="padding:0 40px 30px;">
+            <p style="color:#555;line-height:1.7;font-size:14px;margin:0;">
+              Conservez votre <strong>ID Client (${id})</strong> — il vous sera utile pour toute demande de support ou renouvellement.
+            </p>
+            <p style="color:#555;line-height:1.7;font-size:14px;margin:12px 0 0;">
+              Pour toute question, répondez simplement à cet email. Notre équipe vous répondra dans les plus brefs délais.
+            </p>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="background:#1a1a2e;padding:24px 40px;text-align:center;">
+            <p style="color:#F5A623;margin:0 0 6px;font-weight:bold;font-size:14px;">⚙️ MOHS TECHNOLOGIE</p>
+            <p style="color:#666;margin:0;font-size:12px;">contact@mohstechnologie.com</p>
+            <p style="color:#444;margin:8px 0 0;font-size:11px;">© ${new Date().getFullYear()} MOHS TECHNOLOGIE — Tous droits réservés</p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>",
+        to:   [email],
+        subject: `✅ Bienvenue chez MOHS TECHNOLOGIE — Votre abonnement ${pack}`,
+        html
+      })
+    });
+    const data = await res.json();
+    if (data.id) {
+      console.log(`✅ Mail envoyé à ${email} (ID: ${data.id})`);
+      return true;
+    } else {
+      console.error("❌ Resend:", JSON.stringify(data));
+      return false;
+    }
+  } catch(e) {
+    console.error("❌ Mail:", e.message);
+    return false;
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
-// GÉNÉRER LIEN FEDAPAY (sera activé avec la clé API)
+// GÉNÉRER LIEN FEDAPAY
 // ══════════════════════════════════════════════════════════════════════════════
 async function genererLienPaiement(idClient, montant, nom, pack) {
   if (!FEDAPAY_API_KEY) return null;
   try {
     const res = await fetch("https://api.fedapay.com/v1/transactions", {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${FEDAPAY_API_KEY}`,
-        "Content-Type": "application/json"
-      },
+      headers: { "Authorization": `Bearer ${FEDAPAY_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        amount: montant,
-        currency: { iso: "XOF" },
+        amount: montant, currency: { iso: "XOF" },
         description: `MOHS BOT — ${pack} — ${nom}`,
         merchant_reference: `MOHSBOT_${idClient}`,
         callback_url: `https://${process.env.RENDER_EXTERNAL_HOSTNAME}/paiement-confirme`
       })
     });
     const data = await res.json();
-    if (data.v1 && data.v1.token) {
-      return `https://process.fedapay.com/${data.v1.token}`;
-    }
+    if (data.v1 && data.v1.token) return `https://process.fedapay.com/${data.v1.token}`;
     return null;
-  } catch(e) {
-    console.error("❌ FedaPay:", e.message);
-    return null;
-  }
+  } catch(e) { console.error("❌ FedaPay:", e.message); return null; }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MENU PRINCIPAL
+// MENU ADMIN
 // ══════════════════════════════════════════════════════════════════════════════
 function menuAdmin() {
   return `👑 *MOHS BOT — Panneau Admin*
 
 👥 *Clients :*
-\`nouveau [nom] [tel] [pack1/2/3/4] [telegram/whatsapp]\`
-\`client [ID ou téléphone]\`
+\`nouveau [nom] [tel] [email] [pack1/2/3/4] [telegram/whatsapp]\`
+\`client [ID]\` → fiche client
 \`clients\` → tous les clients
 \`actifs\` → clients actifs
 \`expires\` → clients expirés
@@ -123,16 +276,23 @@ app.post("/webhook", async (req, res) => {
 
     const chatId = message.chat.id;
     const text   = message.text.trim();
+    const prenom = message.from?.first_name || "";
+
+    // 🔒 Accès réservé à l'admin
+    if (!isAdmin(chatId)) {
+      await send(chatId, `👋 Bonjour ${prenom} !\n\nBienvenue sur *MOHS TECHNOLOGIE* 🤖\n\nCe service est réservé à un usage interne.\nPour toute demande, contactez-nous : contact@mohstechnologie.com`);
+      return;
+    }
 
     // ── /start ────────────────────────────────────────────────────────────────
     if (text === "/start") {
-      await send(chatId, menuAdmin());
+      await send(chatId, `👋 Bonjour *${prenom}* ! Bienvenue dans ton espace admin.\n\n` + menuAdmin());
       return;
     }
 
     // ── PACKS ─────────────────────────────────────────────────────────────────
     if (text.toLowerCase() === "packs") {
-      let msg = `📦 *CATALOGUE MOHS BOT*\n\n`;
+      let msg = `📦 *CATALOGUE MOHS TECHNOLOGIE*\n\n`;
       for (const [k, p] of Object.entries(PACKS)) {
         msg += `*Pack ${k} — ${p.nom}*\n`;
         msg += `  📱 Telegram : ${p.telegram.toLocaleString("fr-FR")} FCFA/mois\n`;
@@ -143,53 +303,80 @@ app.post("/webhook", async (req, res) => {
     }
 
     // ── NOUVEAU CLIENT ────────────────────────────────────────────────────────
-    // Format : nouveau Paul 22901234567 2 telegram
+    // Format : nouveau Paul 22901234567 paul@gmail.com 2 telegram
     if (text.toLowerCase().startsWith("nouveau ")) {
       const parts = text.split(" ").filter(p => p.trim());
-      if (parts.length < 4) {
-        await send(chatId, "⚠️ Format : `nouveau [nom] [téléphone] [pack 1/2/3/4] [telegram/whatsapp]`\nEx: `nouveau Paul 22901234567 2 telegram`");
+      if (parts.length < 6) {
+        await send(chatId, "⚠️ Format :\n`nouveau [nom] [téléphone] [email] [pack 1/2/3/4] [telegram/whatsapp]`\n\nEx:\n`nouveau Paul 22901234567 paul@gmail.com 2 telegram`");
         return;
       }
-      const [, nom, telephone, packNum, plateforme = "telegram"] = parts;
+
+      const [, nom, telephone, email, packNum, plateforme = "telegram"] = parts;
+
+      // Vérifier email basique
+      if (!email.includes("@")) {
+        await send(chatId, "⚠️ Email invalide. Vérifie le format.\nEx: `paul@gmail.com`");
+        return;
+      }
+
       const packInfo = PACKS[packNum];
       if (!packInfo) {
         await send(chatId, "⚠️ Pack invalide. Choisir entre 1, 2, 3 ou 4.\nTape `packs` pour voir les détails.");
         return;
       }
 
-      await send(chatId, `⏳ Création du client *${nom}*...`);
+      // Générer ID unique
+      const idClient = genererID();
+
+      await send(chatId, `⏳ Enregistrement de *${nom}* (ID: \`${idClient}\`)...`);
 
       const montant = plateforme.toLowerCase() === "whatsapp" ? packInfo.whatsapp : packInfo.telegram;
       const result  = await callSheet("add_client", {
-        nom, telephone, pack: packInfo.nom,
+        id: idClient,
+        nom, telephone, email,
+        pack: packInfo.nom,
         plateforme: plateforme.charAt(0).toUpperCase() + plateforme.slice(1),
         montant
       });
 
       if (result.status !== "ok") {
-        await send(chatId, `❌ Erreur : ${result.message}`);
+        await send(chatId, `❌ Erreur Google Sheet : ${result.message}`);
         return;
       }
 
-      // Générer lien de paiement FedaPay
+      // Générer lien FedaPay si dispo
       let lienPaiement = null;
       if (FEDAPAY_API_KEY) {
-        lienPaiement = await genererLienPaiement(result.id, montant, nom, packInfo.nom);
+        lienPaiement = await genererLienPaiement(idClient, montant, nom, packInfo.nom);
       }
 
-      let msg = `✅ *Client créé !*\n\n`;
-      msg += `🆔 ID : *${result.id}*\n`;
-      msg += `👤 Nom : ${result.nom}\n`;
-      msg += `📦 Pack : ${result.pack}\n`;
+      // Envoyer mail de bienvenue au client
+      const mailEnvoye = await envoyerMailBienvenue({
+        email, nom,
+        id: idClient,
+        pack: packInfo.nom,
+        montant,
+        plateforme: plateforme.charAt(0).toUpperCase() + plateforme.slice(1),
+        date_fin: result.date_fin,
+        lienPaiement
+      });
+
+      // Réponse Telegram à toi
+      let msg = `✅ *Client enregistré !*\n\n`;
+      msg += `🆔 ID : \`${idClient}\`\n`;
+      msg += `👤 Nom : ${nom}\n`;
+      msg += `📞 Tél : ${telephone}\n`;
+      msg += `📧 Email : ${email}\n`;
+      msg += `📦 Pack : ${packInfo.nom}\n`;
+      msg += `📱 Plateforme : ${plateforme}\n`;
       msg += `💰 Montant : ${montant.toLocaleString("fr-FR")} FCFA/mois\n`;
       msg += `📅 Valide jusqu'au : *${result.date_fin}*\n\n`;
+      msg += mailEnvoye
+        ? `📧 Mail de bienvenue envoyé à ${email} ✅`
+        : `⚠️ Mail non envoyé (RESEND_API_KEY non configurée)`;
 
       if (lienPaiement) {
-        msg += `💳 *Lien de paiement :*\n${lienPaiement}\n\n`;
-        msg += `_Envoie ce lien à ${nom} pour activer son abonnement._`;
-      } else {
-        msg += `⚠️ _Lien FedaPay disponible dès activation de la clé API._\n`;
-        msg += `En attendant, renouvèle manuellement : \`renouveler ${result.id}\``;
+        msg += `\n\n💳 Lien FedaPay :\n${lienPaiement}`;
       }
 
       await send(chatId, msg);
@@ -200,20 +387,18 @@ app.post("/webhook", async (req, res) => {
     if (text.toLowerCase().startsWith("client ")) {
       const recherche = text.split(" ").slice(1).join(" ").trim();
       const result    = await callSheet("get_client", { id: recherche, telephone: recherche });
+      if (result.status !== "ok") { await send(chatId, `❌ ${result.message}`); return; }
 
-      if (result.status !== "ok") {
-        await send(chatId, `❌ ${result.message}`);
-        return;
-      }
-
-      const c      = result;
-      const emoji  = c.statut === "ACTIF" ? "🟢" : c.statut === "EXPIRÉ" ? "🔴" : "🟡";
+      const c     = result;
+      const emoji = c.statut === "ACTIF" ? "🟢" : c.statut === "EXPIRÉ" ? "🔴" : "🟡";
       const alertJ = c.jours_restants <= 3 ? "🚨" : c.jours_restants <= 7 ? "⚠️" : "";
 
-      let msg = `👤 *Fiche Client #${c.id}*\n\n`;
+      let msg = `👤 *Fiche Client*\n\n`;
       msg += `${emoji} Statut : *${c.statut}*\n`;
+      msg += `🆔 ID : \`${c.id}\`\n`;
       msg += `👤 Nom : ${c.nom}\n`;
       msg += `📞 Tél : ${c.telephone || "—"}\n`;
+      msg += `📧 Email : ${c.email || "—"}\n`;
       msg += `📦 Pack : ${c.pack}\n`;
       msg += `📱 Plateforme : ${c.plateforme}\n`;
       msg += `💰 Montant : ${Number(c.montant).toLocaleString("fr-FR")} FCFA/mois\n`;
@@ -221,9 +406,9 @@ app.post("/webhook", async (req, res) => {
       msg += `📅 Fin : ${c.date_fin}\n`;
       msg += `⏳ Jours restants : *${c.jours_restants}* ${alertJ}\n\n`;
       msg += `⚙️ Actions :\n`;
-      msg += `• \`renouveler ${c.id}\` → prolonger 30 jours\n`;
-      msg += `• \`suspendre ${c.id}\` → suspendre\n`;
-      msg += `• \`reactiver ${c.id}\` → réactiver`;
+      msg += `• \`renouveler ${c.id}\`\n`;
+      msg += `• \`suspendre ${c.id}\`\n`;
+      msg += `• \`reactiver ${c.id}\``;
 
       await send(chatId, msg);
       return;
@@ -242,9 +427,9 @@ app.post("/webhook", async (req, res) => {
 
       let msg = `📋 *Clients — ${filtre.toUpperCase()}* (${result.total})\n\n`;
       result.clients.forEach(c => {
-        const emoji = c.statut === "ACTIF" ? "🟢" : c.statut === "EXPIRÉ" ? "🔴" : "🟡";
+        const emoji  = c.statut === "ACTIF" ? "🟢" : c.statut === "EXPIRÉ" ? "🔴" : "🟡";
         const alerte = c.jours_restants <= 3 ? " 🚨" : c.jours_restants <= 7 ? " ⚠️" : "";
-        msg += `${emoji} *#${c.id}* ${c.nom} — ${c.pack.replace("Pack ","P")}\n`;
+        msg += `${emoji} \`${c.id}\` *${c.nom}* — ${c.pack.replace("Pack ","P")}\n`;
         msg += `   ⏳ ${c.jours_restants}j restants${alerte} | ${c.plateforme}\n`;
       });
       msg += `\n_Tape \`client [ID]\` pour les détails_`;
@@ -256,15 +441,8 @@ app.post("/webhook", async (req, res) => {
     if (text.toLowerCase().startsWith("renouveler ")) {
       const id     = text.split(" ")[1]?.trim();
       const result = await callSheet("renouveler", { id_client: id, moyen: "Manuel" });
-
-      if (result.status !== "ok") {
-        await send(chatId, `❌ ${result.message}`);
-        return;
-      }
-
-      await send(chatId,
-        `✅ *Renouvellement effectué !*\n\n👤 ${result.nom}\n📅 Nouvelle date de fin : *${result.nouvelle_fin}*\n💰 ${Number(result.montant).toLocaleString("fr-FR")} FCFA`
-      );
+      if (result.status !== "ok") { await send(chatId, `❌ ${result.message}`); return; }
+      await send(chatId, `✅ *Renouvellement effectué !*\n\n👤 ${result.nom}\n🆔 \`${id}\`\n📅 Nouvelle date de fin : *${result.nouvelle_fin}*\n💰 ${Number(result.montant).toLocaleString("fr-FR")} FCFA`);
       return;
     }
 
@@ -273,7 +451,7 @@ app.post("/webhook", async (req, res) => {
       const id     = text.split(" ")[1]?.trim();
       const result = await callSheet("suspendre", { id_client: id });
       if (result.status !== "ok") { await send(chatId, `❌ ${result.message}`); return; }
-      await send(chatId, `🔴 *Client suspendu*\n\n👤 ${result.nom} (#${result.id_client})\n\nTape \`reactiver ${id}\` pour réactiver.`);
+      await send(chatId, `🔴 *Client suspendu*\n\n👤 ${result.nom}\n🆔 \`${id}\`\n\nTape \`reactiver ${id}\` pour réactiver.`);
       return;
     }
 
@@ -282,7 +460,7 @@ app.post("/webhook", async (req, res) => {
       const id     = text.split(" ")[1]?.trim();
       const result = await callSheet("reactiver", { id_client: id });
       if (result.status !== "ok") { await send(chatId, `❌ ${result.message}`); return; }
-      await send(chatId, `🟢 *Client réactivé*\n\n👤 ${result.nom} (#${result.id_client})`);
+      await send(chatId, `🟢 *Client réactivé*\n\n👤 ${result.nom}\n🆔 \`${id}\``);
       return;
     }
 
@@ -290,8 +468,7 @@ app.post("/webhook", async (req, res) => {
     if (text.toLowerCase() === "stats") {
       const result = await callSheet("get_stats");
       if (result.status !== "ok") { await send(chatId, "⚠️ Erreur stats."); return; }
-
-      let msg = `📊 *MOHS BOT — Tableau de bord*\n\n`;
+      let msg = `📊 *MOHS TECHNOLOGIE — Tableau de bord*\n\n`;
       msg += `👥 *Abonnés :*\n`;
       msg += `  🟢 Actifs : *${result.actifs}*\n`;
       msg += `  🔴 Expirés : *${result.expires}*\n`;
@@ -307,7 +484,7 @@ app.post("/webhook", async (req, res) => {
     }
 
     // ── Commande inconnue ─────────────────────────────────────────────────────
-    await send(chatId, menuAdmin());
+    await send(chatId, `❓ Commande non reconnue.\n\n` + menuAdmin());
 
   } catch(err) {
     console.error("❌ Webhook:", err.message);
@@ -315,88 +492,42 @@ app.post("/webhook", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// WEBHOOK FEDAPAY — reçoit la confirmation de paiement
+// WEBHOOK FEDAPAY
 // ══════════════════════════════════════════════════════════════════════════════
 app.post("/paiement-confirme", async (req, res) => {
   res.sendStatus(200);
   try {
     const event = req.body;
-    console.log("💳 FedaPay webhook:", JSON.stringify(event));
-
-    // Vérifier que c'est un paiement approuvé
     if (event.name !== "transaction.approved") return;
-
     const transaction = event.entity;
-    const ref         = transaction.merchant_reference || "";
-
-    // Extraire l'ID client depuis la ref : "MOHSBOT_001" → "001"
+    const ref = transaction.merchant_reference || "";
     if (!ref.startsWith("MOHSBOT_")) return;
     const idClient = ref.replace("MOHSBOT_", "");
-
-    // Mettre à jour l'abonnement
-    const result = await callSheet("update_abonnement", {
-      id_client:    idClient,
-      ref_paiement: transaction.id,
-      moyen:        "FedaPay"
-    });
-
-    if (result.status === "ok") {
-      console.log(`✅ Abonnement renouvelé : Client ${idClient} → ${result.nouvelle_fin}`);
-
-      // Notifier l'admin
-      if (ADMIN_CHAT_ID) {
-        await send(ADMIN_CHAT_ID,
-          `💰 *Paiement reçu !*\n\n👤 ${result.nom}\n🆔 Client #${idClient}\n💵 ${Number(result.montant).toLocaleString("fr-FR")} FCFA\n📅 Valide jusqu'au : *${result.nouvelle_fin}*`
-        );
-      }
-
-      // Notifier le client si on a son chat_id
-      const clientInfo = await callSheet("get_client", { id: idClient });
-      if (clientInfo.status === "ok" && clientInfo.chat_id) {
-        // Envoyer sur son bot (nécessite son bot_token)
-        // À implémenter quand les bots clients seront déployés
-      }
+    const result = await callSheet("update_abonnement", { id_client: idClient, ref_paiement: transaction.id, moyen: "FedaPay" });
+    if (result.status === "ok" && ADMIN_CHAT_ID) {
+      await send(ADMIN_CHAT_ID, `💰 *Paiement reçu !*\n\n👤 ${result.nom}\n🆔 \`${idClient}\`\n💵 ${Number(result.montant).toLocaleString("fr-FR")} FCFA\n📅 Valide jusqu'au : *${result.nouvelle_fin}*`);
     }
-  } catch(e) {
-    console.error("❌ FedaPay webhook:", e.message);
-  }
+  } catch(e) { console.error("❌ FedaPay webhook:", e.message); }
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// SCHEDULER — vérification quotidienne des expirations
+// SCHEDULER
 // ══════════════════════════════════════════════════════════════════════════════
 async function checkExpirations() {
   try {
-    console.log("🔍 Vérification expirations...");
     const result = await callSheet("expire_check");
     if (result.status !== "ok") return;
-
-    // Alertes J-7, J-3, J-1
     for (const a of result.alertes || []) {
       const emoji = a.jours === 1 ? "🚨" : a.jours === 3 ? "🔴" : "⚠️";
-      await send(ADMIN_CHAT_ID,
-        `${emoji} *Alerte expiration*\n\n👤 ${a.nom} (#${a.id})\n📦 ${a.pack}\n⏳ Expire dans *${a.jours} jour(s)*\n💰 ${Number(a.montant).toLocaleString("fr-FR")} FCFA\n\nAction : \`renouveler ${a.id}\``
-      );
+      await send(ADMIN_CHAT_ID, `${emoji} *Alerte expiration*\n\n👤 ${a.nom}\n🆔 \`${a.id}\`\n📦 ${a.pack}\n⏳ Expire dans *${a.jours} jour(s)*\n💰 ${Number(a.montant).toLocaleString("fr-FR")} FCFA\n\nAction : \`renouveler ${a.id}\``);
     }
-
-    // Expirés aujourd'hui
     for (const e of result.expires || []) {
-      await send(ADMIN_CHAT_ID,
-        `❌ *Abonnement expiré*\n\n👤 ${e.nom} (#${e.id})\n📦 ${e.pack}\n💰 ${Number(e.montant).toLocaleString("fr-FR")} FCFA\n\nAction : \`renouveler ${e.id}\``
-      );
+      await send(ADMIN_CHAT_ID, `❌ *Abonnement expiré*\n\n👤 ${e.nom}\n🆔 \`${e.id}\`\n📦 ${e.pack}\n💰 ${Number(e.montant).toLocaleString("fr-FR")} FCFA\n\nAction : \`renouveler ${e.id}\``);
     }
-
-    if (result.total_alertes > 0 || result.total_expires > 0) {
-      console.log(`📊 ${result.total_alertes} alertes, ${result.total_expires} expirés`);
-    }
-  } catch(e) {
-    console.error("❌ Scheduler:", e.message);
-  }
+  } catch(e) { console.error("❌ Scheduler:", e.message); }
 }
 
-// Lancer le scheduler toutes les heures
 setInterval(checkExpirations, 60 * 60 * 1000);
-// Vérifier au démarrage après 10 secondes
 setTimeout(checkExpirations, 10000);
 
 const PORT = process.env.PORT || 3000;
