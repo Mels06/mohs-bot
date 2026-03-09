@@ -10,7 +10,7 @@ app.use(express.json());
 // CONFIG
 // ══════════════════════════════════════════════════════════════════════════════
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbzVcNj5Ba41BgVM65pWtrv3lC6XUM7JEcKgQ1f9zwKQDMMUt6QBxUaDoWqPwmiQSe66SQ/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbwWwYLjfuK99ZS_NBtFxHzNQnUFcMN4SM3e_XVhgO5wFegaSzSyxoa0GrEwfD-oQZsD/exec";
 const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const GMAIL_USER      = process.env.GMAIL_USER      || "contact@mohstechnologie.com";
