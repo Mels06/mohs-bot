@@ -104,37 +104,37 @@ async function send(chatId, text) {
 async function envoyerMail({ email, nom, id, pack, montant, plateforme, date_fin, lienPaiement }) {
   if (!RESEND_API_KEY) return false;
   const lienHtml = lienPaiement
-    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#F5A623;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Payer mon abonnement</a></p>'
+    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Payer mon abonnement</a></p>'
     : '<p style="color:#888;font-size:13px;text-align:center;">Le lien de paiement sera disponible prochainement.</p>';
 
   const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
   <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;">
     <tr><td style="background:#1a1a2e;padding:30px;text-align:center;">
-      <h1 style="color:#F5A623;margin:0;">MOHS TECHNOLOGIE</h1>
+      <h1 style="color:#2f74a3;margin:0;">MOHS TECHNOLOGIE</h1>
       <p style="color:#aaa;margin:5px 0 0;">Solutions Digitales et Bots Intelligents</p>
     </td></tr>
     <tr><td style="padding:30px;">
       <h2 style="color:#1a1a2e;">Bienvenue, ${nom} !</h2>
       <p style="color:#555;">Votre abonnement a ete enregistre avec succes. Voici votre recapitulatif :</p>
       <table width="100%" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:20px 0;">
-        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:10px 15px;color:#F5A623;font-weight:bold;">DETAILS ABONNEMENT</td></tr>
+        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:10px 15px;color:#2f74a3;font-weight:bold;">DETAILS ABONNEMENT</td></tr>
         <tr><td style="padding:10px 15px;color:#888;border-bottom:1px solid #eee;width:40%;">ID Client</td>
-            <td style="padding:10px 15px;border-bottom:1px solid #eee;"><span style="background:#1a1a2e;color:#F5A623;padding:3px 10px;border-radius:15px;font-family:monospace;">${id}</span></td></tr>
+            <td style="padding:10px 15px;border-bottom:1px solid #eee;"><span style="background:#1a1a2e;color:#2f74a3;padding:3px 10px;border-radius:15px;font-family:monospace;">${id}</span></td></tr>
         <tr style="background:#f9f9f9;"><td style="padding:10px 15px;color:#888;border-bottom:1px solid #eee;">Pack</td>
             <td style="padding:10px 15px;font-weight:bold;border-bottom:1px solid #eee;">${pack}</td></tr>
         <tr><td style="padding:10px 15px;color:#888;border-bottom:1px solid #eee;">Plateforme</td>
             <td style="padding:10px 15px;border-bottom:1px solid #eee;">${plateforme}</td></tr>
         <tr style="background:#f9f9f9;"><td style="padding:10px 15px;color:#888;border-bottom:1px solid #eee;">Montant/mois</td>
-            <td style="padding:10px 15px;color:#F5A623;font-weight:bold;font-size:16px;border-bottom:1px solid #eee;">${Number(montant).toLocaleString("fr-FR")} FCFA</td></tr>
+            <td style="padding:10px 15px;color:#2f74a3;font-weight:bold;font-size:16px;border-bottom:1px solid #eee;">${Number(montant).toLocaleString("fr-FR")} FCFA</td></tr>
         <tr><td style="padding:10px 15px;color:#888;">Valide jusqu'au</td>
             <td style="padding:10px 15px;font-weight:bold;">${date_fin}</td></tr>
       </table>
       ${lienHtml}
       <p style="color:#555;font-size:14px;">Conservez votre ID <strong>${id}</strong> pour tout support ou renouvellement.</p>
-      <p style="color:#555;font-size:14px;">Contact : <a href="mailto:contact@mohstechnologie.com" style="color:#F5A623;">contact@mohstechnologie.com</a></p>
+      <p style="color:#555;font-size:14px;">Contact : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>
     </td></tr>
     <tr><td style="background:#1a1a2e;padding:20px;text-align:center;">
-      <p style="color:#F5A623;margin:0;font-weight:bold;">MOHS TECHNOLOGIE</p>
+      <p style="color:#2f74a3;margin:0;font-weight:bold;">MOHS TECHNOLOGIE</p>
       <p style="color:#666;margin:5px 0 0;font-size:12px;">contact@mohstechnologie.com</p>
       <p style="color:#444;margin:5px 0 0;font-size:11px;">2025 MOHS TECHNOLOGIE - Tous droits reserves</p>
     </td></tr>
