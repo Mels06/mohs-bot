@@ -97,11 +97,14 @@ async function send(chatId, text) {
 async function genererLienPaiement(idClient, montant, nom, pack) {
   if (!FEDAPAY_API_KEY) { console.log("FEDAPAY_API_KEY manquante"); return null; }
   try {
+    const isTest = FEDAPAY_API_KEY.startsWith("sk_test");
+    const montantFinal = isTest ? 1 : montant;
+    if (isTest) console.log("Mode test - montant fixe a 1 FCFA");
     const res = await fetch("https://api.fedapay.com/v1/transactions", {
       method: "POST",
       headers: { "Authorization": "Bearer " + FEDAPAY_API_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({
-        amount: montant,
+        amount: montantFinal,
         currency: { iso: "XOF" },
         description: "MOHS BOT - " + pack + " - Acompte 50% - " + nom,
         merchant_reference: "MOHSBOT_" + idClient,
