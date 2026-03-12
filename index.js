@@ -119,7 +119,7 @@ async function envoyerMail({ email, nom, id, pack, montant, plateforme, date_fin
       <table width="100%" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:20px 0;">
         <tr style="background:#1a1a2e;"><td colspan="2" style="padding:10px 15px;color:#2f74a3;font-weight:bold;">DETAILS ABONNEMENT</td></tr>
         <tr><td style="padding:10px 15px;color:#888;border-bottom:1px solid #eee;width:40%;">ID Client</td>
-            <td style="padding:10px 15px;border-bottom:1px solid #eee;"><span style="background:#1a1a2e;color:#2f74a3;padding:3px 10px;border-radius:15px;font-family:monospace;">${id}</span></td></tr>
+            <td style="padding:10px 15px;border-bottom:1px solid #eee;"><span style="background:#2f74a3;color:#ffffff;padding:3px 10px;border-radius:15px;font-family:monospace;">${id}</span></td></tr>
         <tr style="background:#f9f9f9;"><td style="padding:10px 15px;color:#888;border-bottom:1px solid #eee;">Pack</td>
             <td style="padding:10px 15px;font-weight:bold;border-bottom:1px solid #eee;">${pack}</td></tr>
         <tr><td style="padding:10px 15px;color:#888;border-bottom:1px solid #eee;">Plateforme</td>
@@ -136,7 +136,7 @@ async function envoyerMail({ email, nom, id, pack, montant, plateforme, date_fin
     <tr><td style="background:#1a1a2e;padding:20px;text-align:center;">
       <p style="color:#2f74a3;margin:0;font-weight:bold;">MOHS TECHNOLOGIE</p>
       <p style="color:#666;margin:5px 0 0;font-size:12px;">contact@mohstechnologie.com</p>
-      <p style="color:#444;margin:5px 0 0;font-size:11px;">2025 MOHS TECHNOLOGIE - Tous droits reserves</p>
+      <p style="color:#ffffff;margin:5px 0 0;font-size:11px;">2025 MOHS TECHNOLOGIE - Tous droits reserves</p>
     </td></tr>
   </table>
 </body></html>`;
