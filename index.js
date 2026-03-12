@@ -115,7 +115,9 @@ async function genererLienPaiement(idClient, montant, nom, pack) {
     });
     const data = await res.json();
     console.log("FedaPay response: " + JSON.stringify(data));
-    if (data.v1 && data.v1.token) return "https://process.fedapay.com/" + data.v1.token;
+    const transaction = data["v1/transaction"];
+    if (transaction && transaction.payment_url) return transaction.payment_url;
+    if (transaction && transaction.payment_token) return "https://process.fedapay.com/" + transaction.payment_token;
     return null;
   } catch(e) { console.error("FedaPay:", e.message); return null; }
 }
