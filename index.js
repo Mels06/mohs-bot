@@ -110,13 +110,7 @@ async function genererLienPaiement(idClient, montant, nom, pack, email, telephon
         currency: { iso: "XOF" },
         description: "MOHS BOT - " + pack + " - Acompte 50% - " + nom,
         merchant_reference: "MOHSBOT_" + idClient,
-        callback_url: "https://" + (process.env.RENDER_EXTERNAL_HOSTNAME || "mohs-technologie.onrender.com") + "/paiement-confirme",
-        redirect_token: "https://" + (process.env.RENDER_EXTERNAL_HOSTNAME || "mohs-technologie.onrender.com"),
-        customer: {
-          firstname: nom,
-          email: (email && email.includes("@")) ? email.trim() : "client@mohstechnologie.com",
-          phone_number: { number: String(telephone || "").replace(/[^0-9]/g, ""), country: "BJ" }
-        }
+        callback_url: "https://" + (process.env.RENDER_EXTERNAL_HOSTNAME || "mohs-technologie.onrender.com") + "/paiement-confirme"
       })
     });
     const data = await res.json();
