@@ -114,9 +114,8 @@ async function genererLienPaiement(idClient, montant, nom, pack, email, telephon
         redirect_token: "https://" + (process.env.RENDER_EXTERNAL_HOSTNAME || "mohs-technologie.onrender.com"),
         customer: {
           firstname: nom,
-          lastname: "",
-          email: email || "",
-          phone_number: { number: telephone || "", country: "BJ" }
+          email: (email && email.includes("@")) ? email.trim() : "client@mohstechnologie.com",
+          phone_number: { number: String(telephone || "").replace(/[^0-9]/g, ""), country: "BJ" }
         }
       })
     });
