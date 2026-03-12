@@ -94,7 +94,7 @@ async function send(chatId, text) {
 }
 
 // ── FEDAPAY ───────────────────────────────────────────────────────────────────
-async function genererLienPaiement(idClient, montant, nom, pack) {
+async function genererLienPaiement(idClient, montant, nom, pack, email, telephone) {
   if (!FEDAPAY_API_KEY) { console.log("FEDAPAY_API_KEY manquante"); return null; }
   // Compte FedaPay non encore valide - desactive jusqu'a validation
   if (FEDAPAY_API_KEY.startsWith("sk_test")) {
@@ -110,7 +110,14 @@ async function genererLienPaiement(idClient, montant, nom, pack) {
         currency: { iso: "XOF" },
         description: "MOHS BOT - " + pack + " - Acompte 50% - " + nom,
         merchant_reference: "MOHSBOT_" + idClient,
-        callback_url: "https://" + (process.env.RENDER_EXTERNAL_HOSTNAME || "mohs-technologie.onrender.com") + "/paiement-confirme"
+        callback_url: "https://" + (process.env.RENDER_EXTERNAL_HOSTNAME || "mohs-technologie.onrender.com") + "/paiement-confirme",
+        redirect_token: "https://" + (process.env.RENDER_EXTERNAL_HOSTNAME || "mohs-technologie.onrender.com"),
+        customer: {
+          firstname: nom,
+          lastname: "",
+          email: email || "",
+          phone_number: { number: telephone || "", country: "BJ" }
+        }
       })
     });
     const data = await res.json();
@@ -254,7 +261,7 @@ app.post("/webhook", async (req, res) => {
       // Générer lien FedaPay pour l'acompte
       let lienPaiement = null;
       if (FEDAPAY_API_KEY) {
-        lienPaiement = await genererLienPaiement(idClient, acompte, nom, packInfo.nom);
+        lienPaiement = await genererLienPaiement(idClient, acompte, nom, packInfo.nom, email, telephone);
       }
 
       // Envoyer mail
