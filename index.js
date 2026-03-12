@@ -6,7 +6,7 @@ const app = express();
 app.use(express.json());
 
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbwFAdQUCIqZhbf8tFQ-XRD1uI2TZiwcxP56cbKxMnn4ydE4hsSDah0KfXl3QvRnXrMP/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbwi2LVRQcLjtQ1LvaMOhvXPfjp_R7wTChcj2KvpI3ABKnvZX0OtaAmanKT1iTjIqBlK/exec";
 const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
@@ -96,15 +96,17 @@ async function send(chatId, text) {
 // ── FEDAPAY ───────────────────────────────────────────────────────────────────
 async function genererLienPaiement(idClient, montant, nom, pack) {
   if (!FEDAPAY_API_KEY) { console.log("FEDAPAY_API_KEY manquante"); return null; }
+  // Compte FedaPay non encore valide - desactive jusqu'a validation
+  if (FEDAPAY_API_KEY.startsWith("sk_test")) {
+    console.log("FedaPay en mode test - lien desactive jusqu'a validation du compte");
+    return null;
+  }
   try {
-    const isTest = FEDAPAY_API_KEY.startsWith("sk_test");
-    const montantFinal = isTest ? 1 : montant;
-    if (isTest) console.log("Mode test - montant fixe a 1 FCFA");
     const res = await fetch("https://api.fedapay.com/v1/transactions", {
       method: "POST",
       headers: { "Authorization": "Bearer " + FEDAPAY_API_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({
-        amount: montantFinal,
+        amount: montant,
         currency: { iso: "XOF" },
         description: "MOHS BOT - " + pack + " - Acompte 50% - " + nom,
         merchant_reference: "MOHSBOT_" + idClient,
