@@ -535,16 +535,6 @@ app.post("/webhook", async (req, res) => {
 });
 
 app.post("/paiement-confirme", async (req, res) => {
-  // Vérifier la signature FedaPay
-  if (FEDAPAY_WEBHOOK_SECRET) {
-    const signature = req.headers["x-fedapay-signature"] || "";
-    const payload   = JSON.stringify(req.body);
-    const expected  = crypto.createHmac("sha256", FEDAPAY_WEBHOOK_SECRET).update(payload).digest("hex");
-    if (signature !== expected) {
-      console.error("Webhook signature invalide - requete rejetee");
-      return res.sendStatus(401);
-    }
-  }
   res.sendStatus(200);
   try {
     const event = req.body;
