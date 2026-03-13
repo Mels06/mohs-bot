@@ -68,6 +68,7 @@ function repondreConversation(intent, prenom) {
       "renouveler [ID] - Renouveler 1 mois\n" +
       "renouveler [ID] 3 - Renouveler 3 mois\n" +
       "suspendre [ID] / reactiver [ID]\n" +
+      "solde [ID] - Envoyer lien paiement solde au client\n" +
       "stats - Tableau de bord\n" +
       "ca mars / ca 2025 / ca 01/01/2025 31/03/2025\n" +
       "commandes / commandes aujourd'hui\n" +
@@ -200,6 +201,61 @@ async function envoyerMail({ email, nom, id, pack, montant, plateforme, date_fin
 }
 
 // ── WEBHOOK ───────────────────────────────────────────────────────────────────
+
+async function envoyerMailSolde({ email, nom, id, pack, montant, solde, lienPaiement }) {
+  if (!RESEND_API_KEY) return false;
+
+  const lienHtml = lienPaiement
+    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Payer mon solde (' + Number(solde).toLocaleString("fr-FR") + ' FCFA)</a></p>'
+    : '<p style="color:#888;font-size:13px;text-align:center;">Lien de paiement non disponible.</p>';
+
+  const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
+  <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+    <tr><td style="background:#1a1a2e;padding:30px;text-align:center;">
+      <h1 style="color:#2f74a3;margin:0;font-size:26px;letter-spacing:2px;">MOHS TECHNOLOGIE</h1>
+      <p style="color:#aaa;margin:5px 0 0;font-size:13px;">Solutions Digitales et Bots Intelligents</p>
+    </td></tr>
+    <tr><td style="padding:30px;">
+      <h2 style="color:#1a1a2e;">Bonjour, ${nom} !</h2>
+      <p style="color:#555;line-height:1.6;">Votre bot est pret. Voici le lien pour regler le solde de votre abonnement :</p>
+      <table width="100%" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:20px 0;">
+        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;">SOLDE A REGLER</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;width:45%;">ID Client</td>
+            <td style="padding:12px 15px;border-bottom:1px solid #eee;"><span style="background:#1a1a2e;color:#2f74a3;padding:4px 12px;border-radius:15px;font-family:monospace;font-weight:bold;">${id}</span></td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Pack</td>
+            <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${pack}</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Montant total</td>
+            <td style="padding:12px 15px;border-bottom:1px solid #eee;">${Number(montant).toLocaleString("fr-FR")} FCFA</td></tr>
+        <tr style="background:#e8f4fb;"><td style="padding:12px 15px;color:#2f74a3;font-weight:bold;">Solde a payer</td>
+            <td style="padding:12px 15px;color:#2f74a3;font-weight:bold;font-size:18px;">${Number(solde).toLocaleString("fr-FR")} FCFA</td></tr>
+      </table>
+      ${lienHtml}
+      <p style="color:#555;font-size:14px;">Pour tout support, contactez-nous : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>
+    </td></tr>
+    <tr><td style="background:#1a1a2e;padding:20px;text-align:center;">
+      <p style="color:#2f74a3;margin:0;font-weight:bold;">MOHS TECHNOLOGIE</p>
+      <p style="color:#666;margin:5px 0 0;font-size:12px;">contact@mohstechnologie.com</p>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>",
+        to: [email],
+        subject: "Reglement du solde - MOHS TECHNOLOGIE - " + pack,
+        html
+      })
+    });
+    const data = await res.json();
+    if (data.id) { console.log("Mail solde envoye a " + email); return true; }
+    console.error("Resend solde:", JSON.stringify(data)); return false;
+  } catch(e) { console.error("Mail solde:", e.message); return false; }
+}
+
 app.get("/", (req, res) => res.send("MOHS BOT Admin operationnel"));
 
 app.post("/webhook", async (req, res) => {
@@ -429,6 +485,56 @@ app.post("/webhook", async (req, res) => {
         msg += "  " + pack + " : " + v.nb + " client(s) - " + Number(v.montant).toLocaleString("fr-FR") + " FCFA\n";
       }
       msg += "\nPar plateforme :\n  Telegram : " + (result.par_plateforme?.telegram||0) + "\n  WhatsApp : " + (result.par_plateforme?.whatsapp||0);
+      await send(chatId, msg);
+      return;
+    }
+
+    // SOLDE
+    if (text.toLowerCase().startsWith("solde ")) {
+      const id = text.split(" ")[1]?.trim();
+      if (!id) { await send(chatId, "Format : solde [ID]
+
+Ex: solde MT-X7K2P"); return; }
+
+      await send(chatId, "Generation du lien de solde pour " + id + " en cours...");
+
+      const client = await callSheet("get_client", { id });
+      if (client.status !== "ok") { await send(chatId, "Client introuvable : " + id); return; }
+
+      const montantTotal = Number(client.montant);
+      const solde        = Math.round(montantTotal / 2);
+
+      let lienPaiement = null;
+      if (FEDAPAY_API_KEY) {
+        lienPaiement = await genererLienPaiement(id, solde, client.nom, client.pack, client.email, client.telephone);
+      }
+
+      // Mail au client
+      const mailEnvoye = client.email ? await envoyerMailSolde({
+        email: client.email, nom: client.nom, id,
+        pack: client.pack, montant: montantTotal, solde, lienPaiement
+      }) : false;
+
+      // Alerte Telegram admin
+      let msg = "Lien solde genere !
+
+";
+      msg += "ID : " + id + "
+";
+      msg += "Nom : " + client.nom + "
+";
+      msg += "Pack : " + client.pack + "
+";
+      msg += "Solde (50%) : " + solde.toLocaleString("fr-FR") + " FCFA
+
+";
+      msg += lienPaiement ? "Lien FedaPay :
+" + lienPaiement + "
+
+" : "Lien FedaPay non genere
+
+";
+      msg += mailEnvoye ? "Mail envoye a " + client.email + " ✅" : "Mail non envoye";
       await send(chatId, msg);
       return;
     }
