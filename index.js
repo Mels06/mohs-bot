@@ -492,9 +492,7 @@ app.post("/webhook", async (req, res) => {
     // SOLDE
     if (text.toLowerCase().startsWith("solde ")) {
       const id = text.split(" ")[1]?.trim();
-      if (!id) { await send(chatId, "Format : solde [ID]
-
-Ex: solde MT-X7K2P"); return; }
+      if (!id) { await send(chatId, "Format : solde [ID]\n\nEx: solde MT-X7K2P"); return; }
 
       await send(chatId, "Generation du lien de solde pour " + id + " en cours...");
 
@@ -516,25 +514,13 @@ Ex: solde MT-X7K2P"); return; }
       }) : false;
 
       // Alerte Telegram admin
-      let msg = "Lien solde genere !
-
-";
-      msg += "ID : " + id + "
-";
-      msg += "Nom : " + client.nom + "
-";
-      msg += "Pack : " + client.pack + "
-";
-      msg += "Solde (50%) : " + solde.toLocaleString("fr-FR") + " FCFA
-
-";
-      msg += lienPaiement ? "Lien FedaPay :
-" + lienPaiement + "
-
-" : "Lien FedaPay non genere
-
-";
-      msg += mailEnvoye ? "Mail envoye a " + client.email + " ✅" : "Mail non envoye";
+      let msg = "Lien solde genere !\n\n";
+      msg += "ID : " + id + "\n";
+      msg += "Nom : " + client.nom + "\n";
+      msg += "Pack : " + client.pack + "\n";
+      msg += "Solde (50%) : " + solde.toLocaleString("fr-FR") + " FCFA\n\n";
+      msg += lienPaiement ? "Lien FedaPay :\n" + lienPaiement + "\n\n" : "Lien FedaPay non genere\n\n";
+      msg += mailEnvoye ? "Mail envoye a " + client.email + " \u2705" : "Mail non envoye";
       await send(chatId, msg);
       return;
     }
