@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const axios   = require("axios");
+const crypto  = require("crypto");
 
 const app = express();
 app.use(express.json());
@@ -10,6 +11,7 @@ const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.co
 const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
+const FEDAPAY_WEBHOOK_SECRET = process.env.FEDAPAY_WEBHOOK_SECRET || "";
 
 function isAdmin(chatId) { return String(chatId) === String(ADMIN_CHAT_ID); }
 
@@ -441,6 +443,16 @@ app.post("/webhook", async (req, res) => {
 });
 
 app.post("/paiement-confirme", async (req, res) => {
+  // Vérifier la signature FedaPay
+  if (FEDAPAY_WEBHOOK_SECRET) {
+    const signature = req.headers["x-fedapay-signature"] || "";
+    const payload   = JSON.stringify(req.body);
+    const expected  = crypto.createHmac("sha256", FEDAPAY_WEBHOOK_SECRET).update(payload).digest("hex");
+    if (signature !== expected) {
+      console.error("Webhook signature invalide - requete rejetee");
+      return res.sendStatus(401);
+    }
+  }
   res.sendStatus(200);
   try {
     const event = req.body;
