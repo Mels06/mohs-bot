@@ -111,6 +111,7 @@ async function genererLienPaiement(idClient, montant, nom, pack, email, telephon
         description: "MOHS BOT - " + pack + " - Acompte 50% - " + nom,
         merchant_reference: "MOHSBOT_" + idClient,
         callback_url: "https://" + (process.env.RENDER_EXTERNAL_HOSTNAME || "mohs-technologie.onrender.com") + "/paiement-confirme",
+        redirect_url: "https://mohstechnologie.com",
         customer: {
           firstname: nom,
           email: email && email.includes("@") ? email.trim() : undefined,
