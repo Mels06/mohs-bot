@@ -11,7 +11,6 @@ const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.co
 const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
-const FEDAPAY_WEBHOOK_SECRET = process.env.FEDAPAY_WEBHOOK_SECRET || "";
 
 function isAdmin(chatId) { return String(chatId) === String(ADMIN_CHAT_ID); }
 
@@ -60,15 +59,14 @@ function repondreConversation(intent, prenom) {
     case "contact":     return "Pour nous contacter :\n\nEmail : contact@mohstechnologie.com\n\nNous repondons dans les plus brefs delais !";
     case "merci":       return "Avec plaisir" + n + " ! N'hesite pas si tu as d'autres questions.";
     case "aide":        return "Voici les principales commandes :\n\n" +
-      "nouveau [nom] [tel] [email] [pack 1-4] [telegram/whatsapp] - Enregistrer un client\n" +
+      "nouveau [nom] [tel] [email] [pack 1-4] [telegram/whatsapp]\n" +
       "nouveau ... 3 - Enregistrer pour 3 mois\n" +
       "client [ID] - Voir fiche client\n" +
-      "clients / actifs / expires / alerte - Listes\n" +
-      "liste pack1 / liste telegram - Listes filtrees\n" +
-      "renouveler [ID] - Renouveler 1 mois\n" +
-      "renouveler [ID] 3 - Renouveler 3 mois\n" +
+      "clients / actifs / expires / alerte\n" +
+      "liste pack1 / liste telegram\n" +
+      "renouveler [ID] / renouveler [ID] 3\n" +
       "suspendre [ID] / reactiver [ID]\n" +
-      "solde [ID] - Envoyer lien paiement solde au client\n" +
+      "solde [ID] - Envoyer lien solde au client\n" +
       "stats - Tableau de bord\n" +
       "ca mars / ca 2025 / ca 01/01/2025 31/03/2025\n" +
       "commandes / commandes aujourd'hui\n" +
@@ -97,14 +95,12 @@ async function send(chatId, text) {
 }
 
 // ── FEDAPAY ───────────────────────────────────────────────────────────────────
-async function genererLienPaiement(idClient, montant, nom, pack, email, telephone) {
+async function genererLienPaiement(reference, montant, nom, pack, email, telephone) {
   if (!FEDAPAY_API_KEY) { console.log("FEDAPAY_API_KEY manquante"); return null; }
   try {
-    // Configurer le SDK FedaPay
     FedaPay.setApiKey(FEDAPAY_API_KEY);
     FedaPay.setEnvironment("live");
 
-    // Etape 1 : Créer la transaction
     const transaction = await Transaction.create({
       description: "MOHS BOT - " + pack + " - " + nom,
       amount: montant,
@@ -120,29 +116,26 @@ async function genererLienPaiement(idClient, montant, nom, pack, email, telephon
       }
     });
 
-    console.log("FedaPay transaction creee ID: " + transaction.id);
+    console.log("FedaPay transaction ID: " + transaction.id);
 
-    // Etape 2 : Générer le token
-    const tokenObj = await transaction.generateToken();
-    
-    // Convertir en objet plain pour accéder aux propriétés
-    const tokenPlain = JSON.parse(JSON.stringify(tokenObj));
-    console.log("FedaPay token: " + JSON.stringify(tokenPlain));
+    const token = await transaction.generateToken();
+    const tokenData = JSON.parse(JSON.stringify(token));
+    console.log("FedaPay token: " + JSON.stringify(tokenData));
 
-    if (tokenPlain.url) return tokenPlain.url;
-    if (tokenPlain.token) return "https://process.fedapay.com/" + tokenPlain.token;
+    if (tokenData.url)   return tokenData.url;
+    if (tokenData.token) return "https://process.fedapay.com/" + tokenData.token;
     return null;
 
   } catch(e) { console.error("FedaPay:", e.message); return null; }
 }
 
-// ── RESEND MAIL ───────────────────────────────────────────────────────────────
+// ── MAIL BIENVENUE ────────────────────────────────────────────────────────────
 async function envoyerMail({ email, nom, id, pack, montant, plateforme, date_fin, lienPaiement, acompte, solde }) {
-  if (!RESEND_API_KEY) { console.log("RESEND_API_KEY manquante"); return false; }
+  if (!RESEND_API_KEY) return false;
 
   const lienHtml = lienPaiement
     ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Payer mon acompte (' + Number(acompte).toLocaleString("fr-FR") + ' FCFA)</a></p>'
-    : '<p style="color:#888;font-size:13px;text-align:center;padding:10px;background:#f0f7ff;border-radius:8px;">Le lien de paiement sera disponible prochainement.</p>';
+    : '<p style="color:#888;font-size:13px;text-align:center;padding:10px;background:#f0f7ff;border-radius:8px;">Le lien de paiement vous sera envoye prochainement.</p>';
 
   const acompteHtml = acompte ? `
     <tr style="background:#e8f4fb;"><td style="padding:10px 15px;color:#2f74a3;font-weight:bold;border-bottom:1px solid #eee;">Acompte a payer (50%)</td>
@@ -158,9 +151,9 @@ async function envoyerMail({ email, nom, id, pack, montant, plateforme, date_fin
     </td></tr>
     <tr><td style="padding:30px;">
       <h2 style="color:#1a1a2e;">Bienvenue, ${nom} !</h2>
-      <p style="color:#555;line-height:1.6;">Votre abonnement a ete enregistre avec succes sur la plateforme MOHS TECHNOLOGIE. Voici votre recapitulatif :</p>
+      <p style="color:#555;line-height:1.6;">Votre abonnement a ete enregistre avec succes. Voici votre recapitulatif :</p>
       <table width="100%" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:20px 0;">
-        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;letter-spacing:1px;">DETAILS ABONNEMENT</td></tr>
+        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;">DETAILS ABONNEMENT</td></tr>
         <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;width:45%;">ID Client</td>
             <td style="padding:12px 15px;border-bottom:1px solid #eee;"><span style="background:#1a1a2e;color:#2f74a3;padding:4px 12px;border-radius:15px;font-family:monospace;font-weight:bold;">${id}</span></td></tr>
         <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Pack souscrit</td>
@@ -174,13 +167,12 @@ async function envoyerMail({ email, nom, id, pack, montant, plateforme, date_fin
             <td style="padding:12px 15px;font-weight:bold;">${date_fin}</td></tr>
       </table>
       ${lienHtml}
-      <p style="color:#555;font-size:14px;line-height:1.6;">Conservez votre ID <strong style="color:#2f74a3;">${id}</strong> pour tout support ou renouvellement.</p>
+      <p style="color:#555;font-size:14px;">Conservez votre ID <strong style="color:#2f74a3;">${id}</strong> pour tout support.</p>
       <p style="color:#555;font-size:14px;">Contact : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>
     </td></tr>
     <tr><td style="background:#1a1a2e;padding:20px;text-align:center;">
-      <p style="color:#2f74a3;margin:0;font-weight:bold;letter-spacing:1px;">MOHS TECHNOLOGIE</p>
+      <p style="color:#2f74a3;margin:0;font-weight:bold;">MOHS TECHNOLOGIE</p>
       <p style="color:#666;margin:5px 0 0;font-size:12px;">contact@mohstechnologie.com</p>
-      <p style="color:#444;margin:5px 0 0;font-size:11px;">2025 MOHS TECHNOLOGIE - Tous droits reserves</p>
     </td></tr>
   </table>
 </body></html>`;
@@ -189,26 +181,20 @@ async function envoyerMail({ email, nom, id, pack, montant, plateforme, date_fin
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>",
-        to: [email],
-        subject: "Bienvenue chez MOHS TECHNOLOGIE - " + pack,
-        html
-      })
+      body: JSON.stringify({ from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>", to: [email], subject: "Bienvenue chez MOHS TECHNOLOGIE - " + pack, html })
     });
     const data = await res.json();
-    if (data.id) { console.log("Mail envoye a " + email); return true; }
+    if (data.id) { console.log("Mail bienvenue envoye a " + email); return true; }
     console.error("Resend:", JSON.stringify(data)); return false;
   } catch(e) { console.error("Mail:", e.message); return false; }
 }
 
-// ── WEBHOOK ───────────────────────────────────────────────────────────────────
-
-async function envoyerMailSolde({ email, nom, id, pack, montant, solde, lienPaiement }) {
+// ── MAIL SOLDE / RENOUVELLEMENT ───────────────────────────────────────────────
+async function envoyerMailSolde({ email, nom, id, pack, montant, solde, lienPaiement, sujet }) {
   if (!RESEND_API_KEY) return false;
 
   const lienHtml = lienPaiement
-    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Payer mon solde (' + Number(solde).toLocaleString("fr-FR") + ' FCFA)</a></p>'
+    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Payer ' + Number(solde).toLocaleString("fr-FR") + ' FCFA</a></p>'
     : '<p style="color:#888;font-size:13px;text-align:center;">Lien de paiement non disponible.</p>';
 
   const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
@@ -219,20 +205,20 @@ async function envoyerMailSolde({ email, nom, id, pack, montant, solde, lienPaie
     </td></tr>
     <tr><td style="padding:30px;">
       <h2 style="color:#1a1a2e;">Bonjour, ${nom} !</h2>
-      <p style="color:#555;line-height:1.6;">Votre bot est pret. Voici le lien pour regler le solde de votre abonnement :</p>
+      <p style="color:#555;line-height:1.6;">${sujet === "renouvellement" ? "Voici le lien pour renouveler votre abonnement." : "Votre bot est pret. Voici le lien pour regler le solde."}</p>
       <table width="100%" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:20px 0;">
-        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;">SOLDE A REGLER</td></tr>
+        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;">${sujet === "renouvellement" ? "RENOUVELLEMENT" : "SOLDE A REGLER"}</td></tr>
         <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;width:45%;">ID Client</td>
             <td style="padding:12px 15px;border-bottom:1px solid #eee;"><span style="background:#1a1a2e;color:#2f74a3;padding:4px 12px;border-radius:15px;font-family:monospace;font-weight:bold;">${id}</span></td></tr>
         <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Pack</td>
             <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${pack}</td></tr>
         <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Montant total</td>
             <td style="padding:12px 15px;border-bottom:1px solid #eee;">${Number(montant).toLocaleString("fr-FR")} FCFA</td></tr>
-        <tr style="background:#e8f4fb;"><td style="padding:12px 15px;color:#2f74a3;font-weight:bold;">Solde a payer</td>
+        <tr style="background:#e8f4fb;"><td style="padding:12px 15px;color:#2f74a3;font-weight:bold;">Montant a payer</td>
             <td style="padding:12px 15px;color:#2f74a3;font-weight:bold;font-size:18px;">${Number(solde).toLocaleString("fr-FR")} FCFA</td></tr>
       </table>
       ${lienHtml}
-      <p style="color:#555;font-size:14px;">Pour tout support, contactez-nous : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>
+      <p style="color:#555;font-size:14px;">Contact : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>
     </td></tr>
     <tr><td style="background:#1a1a2e;padding:20px;text-align:center;">
       <p style="color:#2f74a3;margin:0;font-weight:bold;">MOHS TECHNOLOGIE</p>
@@ -248,14 +234,14 @@ async function envoyerMailSolde({ email, nom, id, pack, montant, solde, lienPaie
       body: JSON.stringify({
         from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>",
         to: [email],
-        subject: "Reglement du solde - MOHS TECHNOLOGIE - " + pack,
+        subject: (sujet === "renouvellement" ? "Renouvellement" : "Reglement du solde") + " - MOHS TECHNOLOGIE - " + pack,
         html
       })
     });
     const data = await res.json();
-    if (data.id) { console.log("Mail solde envoye a " + email); return true; }
-    console.error("Resend solde:", JSON.stringify(data)); return false;
-  } catch(e) { console.error("Mail solde:", e.message); return false; }
+    if (data.id) { console.log("Mail " + sujet + " envoye a " + email); return true; }
+    console.error("Resend " + sujet + ":", JSON.stringify(data)); return false;
+  } catch(e) { console.error("Mail " + sujet + ":", e.message); return false; }
 }
 
 app.get("/", (req, res) => res.send("MOHS BOT Admin operationnel"));
@@ -275,7 +261,7 @@ app.post("/webhook", async (req, res) => {
     }
 
     if (text === "/start") {
-      await send(chatId, "Bonjour " + prenom + " ! Content de te voir.\n\nJe suis ton assistant MOHS TECHNOLOGIE. Je gere tes clients, abonnements, stats et finances.\n\nTape 'aide' pour voir toutes les commandes disponibles.");
+      await send(chatId, "Bonjour " + prenom + " ! Content de te voir.\n\nJe suis ton assistant MOHS TECHNOLOGIE.\n\nTape 'aide' pour voir toutes les commandes.");
       return;
     }
 
@@ -294,7 +280,7 @@ app.post("/webhook", async (req, res) => {
     if (text.toLowerCase().startsWith("nouveau ")) {
       const parts = text.split(" ").filter(p => p.trim());
       if (parts.length < 6) {
-        await send(chatId, "Format :\nnouveau [nom] [tel] [email] [pack 1-4] [telegram/whatsapp] [nb_mois optionnel]\n\nEx:\nnouveau Paul 22901234567 paul@gmail.com 2 telegram\nnouveau Paul 22901234567 paul@gmail.com 2 telegram 3");
+        await send(chatId, "Format :\nnouveau [nom] [tel] [email] [pack 1-4] [telegram/whatsapp] [nb_mois optionnel]");
         return;
       }
       const [, nom, telephone, email, packNum, plateforme = "telegram"] = parts;
@@ -303,13 +289,13 @@ app.post("/webhook", async (req, res) => {
       const packInfo = PACKS[packNum];
       if (!packInfo) { await send(chatId, "Pack invalide. Tape 'packs' pour voir les details."); return; }
 
-      const idClient = genererID();
-      await send(chatId, "Enregistrement de " + nom + " en cours...");
-
+      const idClient     = genererID();
       const montant      = plateforme.toLowerCase() === "whatsapp" ? packInfo.whatsapp : packInfo.telegram;
       const montantTotal = montant * nbMois;
       const acompte      = Math.round(montantTotal / 2);
       const solde        = montantTotal - acompte;
+
+      await send(chatId, "Enregistrement de " + nom + " en cours...");
 
       const result = await callSheet("add_client", {
         id: idClient, nom, telephone, email,
@@ -320,13 +306,13 @@ app.post("/webhook", async (req, res) => {
 
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
 
-      // Générer lien FedaPay pour l'acompte
+      // Générer lien FedaPay
       let lienPaiement = null;
       if (FEDAPAY_API_KEY) {
         lienPaiement = await genererLienPaiement(idClient, acompte, nom, packInfo.nom, email, telephone);
       }
 
-      // Envoyer mail
+      // Envoyer mail bienvenue
       const mailEnvoye = await envoyerMail({
         email, nom, id: idClient, pack: packInfo.nom, montant,
         plateforme: plateforme.charAt(0).toUpperCase() + plateforme.slice(1),
@@ -345,8 +331,8 @@ app.post("/webhook", async (req, res) => {
       msg += "Acompte (50%) : " + acompte.toLocaleString("fr-FR") + " FCFA\n";
       msg += "Solde restant : " + solde.toLocaleString("fr-FR") + " FCFA\n";
       msg += "Valide jusqu'au : " + result.date_fin + "\n\n";
-      msg += lienPaiement ? "Lien FedaPay genere ✅\n" : "Lien FedaPay non genere\n";
-      msg += mailEnvoye ? "Mail envoye a " + email + " ✅" : "Mail non envoye";
+      msg += lienPaiement ? "Lien FedaPay genere\n" + lienPaiement + "\n\n" : "Lien FedaPay non genere\n";
+      msg += mailEnvoye ? "Mail envoye a " + email + " OK" : "Mail non envoye";
       await send(chatId, msg);
       return;
     }
@@ -406,52 +392,48 @@ app.post("/webhook", async (req, res) => {
     }
 
     // RENOUVELER
-    if (["renouveler","renouvellement","reabonner","reabonnement","prolonger","prolongation","reconduire","reconduction","relancer"].some(m => text.toLowerCase().startsWith(m + " "))) {
+    if (["renouveler","renouvellement","reabonner","reabonnement","prolonger","prolongation","reconduire","reconduction"].some(m => text.toLowerCase().startsWith(m + " "))) {
       const parts  = text.split(" ");
       const id     = parts[1]?.trim();
       const nbMois = parseInt(parts[2]) || 1;
+      if (!id) { await send(chatId, "Format : renouveler [ID] [nb mois]\n\nEx: renouveler MT-X7K2P\nEx: renouveler MT-X7K2P 3"); return; }
 
-      if (!id) { await send(chatId, "Format : renouveler [ID] [nb mois optionnel]\n\nEx: renouveler MT-X7K2P\nEx: renouveler MT-X7K2P 3"); return; }
+      await send(chatId, "Preparation du renouvellement pour " + id + "...");
 
-      await send(chatId, "Preparation du renouvellement de " + id + " en cours...");
-
-      // Récupérer infos client
       const client = await callSheet("get_client", { id });
       if (client.status !== "ok") { await send(chatId, "Client introuvable : " + id); return; }
 
       const montantTotal = Number(client.montant) * nbMois;
 
-      // Générer lien FedaPay D ABORD
+      // 1. Générer lien FedaPay AVANT tout
       let lienPaiement = null;
       if (FEDAPAY_API_KEY) {
-        const refRnw = "RNW" + id.replace("MT-", "") + Date.now().toString().slice(-4);
-        lienPaiement = await genererLienPaiement(refRnw, montantTotal, client.nom, client.pack, client.email, client.telephone);
+        lienPaiement = await genererLienPaiement(id, montantTotal, client.nom, client.pack, client.email, client.telephone);
       }
 
-      if (!lienPaiement) {
-        await send(chatId, "Erreur : impossible de generer le lien FedaPay. Reessaie.");
-        return;
-      }
+      if (!lienPaiement) { await send(chatId, "Erreur generation lien FedaPay. Reessaie."); return; }
 
-      // Prolonger la date SEULEMENT si lien genere
+      // 2. Prolonger la date dans Sheets
       const result = await callSheet("renouveler", { id_client: id, moyen: "FedaPay", nb_mois: nbMois });
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
 
-      // Envoyer mail au client avec lien
+      // 3. Envoyer mail au client
       if (client.email) {
         await envoyerMailSolde({
           email: client.email, nom: client.nom, id,
-          pack: client.pack, montant: montantTotal, solde: montantTotal, lienPaiement
+          pack: client.pack, montant: montantTotal, solde: montantTotal,
+          lienPaiement, sujet: "renouvellement"
         });
       }
 
-      let msg = "Renouvellement en attente de paiement\n\n";
+      let msg = "Renouvellement prepare !\n\n";
       msg += "Nom : " + client.nom + "\n";
       msg += "ID : " + id + "\n";
       msg += "Duree : " + nbMois + " mois\n";
       msg += "Nouvelle fin : " + result.nouvelle_fin + "\n";
       msg += "Montant : " + montantTotal.toLocaleString("fr-FR") + " FCFA\n\n";
-      msg += "Lien FedaPay envoye au client :\n" + lienPaiement;
+      msg += "Lien FedaPay :\n" + lienPaiement + "\n\n";
+      msg += client.email ? "Mail envoye a " + client.email : "Pas d email client";
       await send(chatId, msg);
       return;
     }
@@ -466,11 +448,50 @@ app.post("/webhook", async (req, res) => {
     }
 
     // REACTIVER
-    if (["reactiver","reactivation","activer","activation","debloquer","relancer"].some(m => text.toLowerCase().startsWith(m + " "))) {
+    if (["reactiver","reactivation","activer","activation","debloquer"].some(m => text.toLowerCase().startsWith(m + " "))) {
       const id = text.split(" ")[1]?.trim();
       const result = await callSheet("reactiver", { id_client: id });
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
       await send(chatId, "Client reactive\nNom : " + result.nom + "\nID : " + id);
+      return;
+    }
+
+    // SOLDE
+    if (["solde","reste","restant","complement"].some(m => text.toLowerCase().startsWith(m + " "))) {
+      const id = text.split(" ")[1]?.trim();
+      if (!id) { await send(chatId, "Format : solde [ID]\n\nEx: solde MT-X7K2P"); return; }
+
+      await send(chatId, "Generation du lien de solde pour " + id + "...");
+
+      const client = await callSheet("get_client", { id });
+      if (client.status !== "ok") { await send(chatId, "Client introuvable : " + id); return; }
+
+      const montantTotal = Number(client.montant);
+      const solde        = Math.round(montantTotal / 2);
+
+      // Générer lien FedaPay
+      let lienPaiement = null;
+      if (FEDAPAY_API_KEY) {
+        lienPaiement = await genererLienPaiement(id, solde, client.nom, client.pack, client.email, client.telephone);
+      }
+
+      console.log("SOLDE lienPaiement = " + lienPaiement);
+
+      // Envoyer mail avec lien
+      const mailEnvoye = client.email ? await envoyerMailSolde({
+        email: client.email, nom: client.nom, id,
+        pack: client.pack, montant: montantTotal, solde,
+        lienPaiement, sujet: "solde"
+      }) : false;
+
+      let msg = "Solde genere !\n\n";
+      msg += "ID : " + id + "\n";
+      msg += "Nom : " + client.nom + "\n";
+      msg += "Pack : " + client.pack + "\n";
+      msg += "Solde (50%) : " + solde.toLocaleString("fr-FR") + " FCFA\n\n";
+      msg += lienPaiement ? "Lien FedaPay :\n" + lienPaiement + "\n\n" : "Lien FedaPay non genere\n\n";
+      msg += mailEnvoye ? "Mail envoye a " + client.email : "Mail non envoye";
+      await send(chatId, msg);
       return;
     }
 
@@ -531,47 +552,11 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // SOLDE
-    if (["solde","reste","restant","complement","paiement final","payer le reste"].some(m => text.toLowerCase().startsWith(m + " "))) {
-      const id = text.split(" ")[1]?.trim();
-      if (!id) { await send(chatId, "Format : solde [ID]\n\nEx: solde MT-X7K2P"); return; }
-
-      await send(chatId, "Generation du lien de solde pour " + id + " en cours...");
-
-      const client = await callSheet("get_client", { id });
-      if (client.status !== "ok") { await send(chatId, "Client introuvable : " + id); return; }
-
-      const montantTotal = Number(client.montant);
-      const solde        = Math.round(montantTotal / 2);
-
-      let lienPaiement = null;
-      if (FEDAPAY_API_KEY) {
-        lienPaiement = await genererLienPaiement(id, solde, client.nom, client.pack, client.email, client.telephone);
-      }
-
-      // Mail au client
-      const mailEnvoye = client.email ? await envoyerMailSolde({
-        email: client.email, nom: client.nom, id,
-        pack: client.pack, montant: montantTotal, solde, lienPaiement
-      }) : false;
-
-      // Alerte Telegram admin
-      let msg = "Lien solde genere !\n\n";
-      msg += "ID : " + id + "\n";
-      msg += "Nom : " + client.nom + "\n";
-      msg += "Pack : " + client.pack + "\n";
-      msg += "Solde (50%) : " + solde.toLocaleString("fr-FR") + " FCFA\n\n";
-      msg += lienPaiement ? "Lien FedaPay :\n" + lienPaiement + "\n\n" : "Lien FedaPay non genere\n\n";
-      msg += mailEnvoye ? "Mail envoye a " + client.email + " \u2705" : "Mail non envoye";
-      await send(chatId, msg);
-      return;
-    }
-
     // CONVERSATION NATURELLE
     const intent = detectIntent(text);
     if (intent) { await send(chatId, repondreConversation(intent, prenom)); return; }
 
-    await send(chatId, "Je n'ai pas compris. Tape 'aide' pour voir toutes les commandes disponibles.");
+    await send(chatId, "Je n'ai pas compris. Tape 'aide' pour voir toutes les commandes.");
 
   } catch(err) { console.error("Webhook:", err.message); }
 });
