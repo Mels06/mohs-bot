@@ -128,7 +128,7 @@ async function genererLienPaiement(reference, montant, nom, pack, email, telepho
     if (tokenData.token) return "https://process.fedapay.com/" + tokenData.token;
     return null;
 
-  } catch(e) { console.error("FedaPay:", e.message); return null; }
+  } catch(e) { console.error("FedaPay error:", e.message); console.error("FedaPay details:", JSON.stringify(e.response?.data || e.errors || "")); return null; }
 }
 
 // ── MAIL BIENVENUE ────────────────────────────────────────────────────────────
