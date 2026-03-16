@@ -101,11 +101,13 @@ async function genererLienPaiement(reference, montant, nom, pack, email, telepho
     FedaPay.setApiKey(FEDAPAY_API_KEY);
     FedaPay.setEnvironment("live");
 
+    const uniqueRef = "MOHSBOT_" + reference;
     const transaction = await Transaction.create({
       description: "MOHS BOT - " + pack + " - " + nom,
       amount: montant,
       currency: { iso: "XOF" },
       callback_url: "https://mohs-technologie.onrender.com/paiement-confirme",
+      merchant_reference: uniqueRef,
       customer: {
         firstname: nom,
         email: email && email.includes("@") ? email.trim() : "client@mohstechnologie.com",
@@ -309,7 +311,7 @@ app.post("/webhook", async (req, res) => {
       // Générer lien FedaPay
       let lienPaiement = null;
       if (FEDAPAY_API_KEY) {
-        lienPaiement = await genererLienPaiement(idClient, acompte, nom, packInfo.nom, email, telephone);
+        lienPaiement = await genererLienPaiement(idClient + "_ACO", acompte, nom, packInfo.nom, email, telephone);
       }
 
       // Envoyer mail bienvenue
@@ -408,7 +410,7 @@ app.post("/webhook", async (req, res) => {
       // 1. Générer lien FedaPay AVANT tout
       let lienPaiement = null;
       if (FEDAPAY_API_KEY) {
-        lienPaiement = await genererLienPaiement(id, montantTotal, client.nom, client.pack, client.email, client.telephone);
+        lienPaiement = await genererLienPaiement(id + "_RNW", montantTotal, client.nom, client.pack, client.email, client.telephone);
       }
 
       if (!lienPaiement) { await send(chatId, "Erreur generation lien FedaPay. Reessaie."); return; }
@@ -472,7 +474,7 @@ app.post("/webhook", async (req, res) => {
       // Générer lien FedaPay
       let lienPaiement = null;
       if (FEDAPAY_API_KEY) {
-        lienPaiement = await genererLienPaiement(id, solde, client.nom, client.pack, client.email, client.telephone);
+        lienPaiement = await genererLienPaiement(id + "_SOL", solde, client.nom, client.pack, client.email, client.telephone);
       }
 
       console.log("SOLDE lienPaiement = " + lienPaiement);
@@ -569,7 +571,11 @@ app.post("/paiement-confirme", async (req, res) => {
     const transaction = event.entity;
     const ref = transaction.merchant_reference || "";
     if (!ref.startsWith("MOHSBOT_")) return;
-    const idClient = ref.replace("MOHSBOT_", "");
+    // Format: MOHSBOT_MT-XXXXX_timestamp - on extrait juste l ID client
+    // Format MOHSBOT_MT-XXXXX_TYPE
+    const parts = ref.replace("MOHSBOT_", "").split("_");
+    const idClient = parts[0] + (parts[1] ? "_" + parts[1] : "");
+    const typePaiement = parts[2] || "ACO";
     const result = await callSheet("update_abonnement", { id_client: idClient, ref_paiement: transaction.id, moyen: "FedaPay" });
     if (result.status === "ok") {
       await send(ADMIN_CHAT_ID, "Paiement recu !\n\nNom : " + result.nom + "\nID : " + idClient + "\nMontant : " + Number(result.montant).toLocaleString("fr-FR") + " FCFA\nValide jusqu'au : " + result.nouvelle_fin);
