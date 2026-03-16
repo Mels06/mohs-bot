@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbwi2LVRQcLjtQ1LvaMOhvXPfjp_R7wTChcj2KvpI3ABKnvZX0OtaAmanKT1iTjIqBlK/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbwaBUlIufwOOd7bIgwyfcBOyRJdocCkLNV-btjWCYGNp1DXMKTCnmQLqW1g2C9V0tV4/exec";
 const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
@@ -123,10 +123,21 @@ async function genererLienPaiement(idClient, montant, nom, pack, email, telephon
     console.log("FedaPay transaction creee ID: " + transaction.id);
 
     // Etape 2 : Générer le token
-    const token = await transaction.generateToken();
-    console.log("FedaPay token: " + JSON.stringify(token));
+    const tokenObj = await transaction.generateToken();
+    console.log("FedaPay token obj keys: " + JSON.stringify(Object.keys(tokenObj)));
+    console.log("FedaPay token: " + JSON.stringify(tokenObj));
 
-    return token.url || ("https://process.fedapay.com/" + token.token);
+    // Le SDK retourne l objet avec token et url
+    const tokenStr = tokenObj.token || tokenObj.klass && tokenObj.token;
+    const tokenUrl = tokenObj.url;
+
+    if (tokenUrl) return tokenUrl;
+    if (tokenStr) return "https://process.fedapay.com/" + tokenStr;
+
+    // Fallback : utiliser payment_url de la transaction
+    const updatedTx = await Transaction.retrieve(transaction.id);
+    console.log("FedaPay tx updated: " + JSON.stringify(updatedTx.payment_url));
+    return updatedTx.payment_url || null;
 
   } catch(e) { console.error("FedaPay:", e.message); return null; }
 }
@@ -423,7 +434,8 @@ app.post("/webhook", async (req, res) => {
       // Générer lien FedaPay
       let lienPaiement = null;
       if (FEDAPAY_API_KEY) {
-        lienPaiement = await genererLienPaiement(id + "_RNW", montantTotal, client.nom, client.pack, client.email, client.telephone);
+        const refRnw = id.replace("MT-", "RNW-") + "-" + Date.now().toString().slice(-4);
+        lienPaiement = await genererLienPaiement(refRnw, montantTotal, client.nom, client.pack, client.email, client.telephone);
       }
 
       let msg = "Renouvellement enregistre !\n\n";
