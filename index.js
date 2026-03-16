@@ -1,7 +1,7 @@
 require("dotenv").config();
-const express = require("express");
-const axios   = require("axios");
-const crypto  = require("crypto");
+const express  = require("express");
+const axios    = require("axios");
+const { FedaPay, Transaction } = require("fedapay");
 
 const app = express();
 app.use(express.json());
@@ -99,38 +99,35 @@ async function send(chatId, text) {
 // ── FEDAPAY ───────────────────────────────────────────────────────────────────
 async function genererLienPaiement(idClient, montant, nom, pack, email, telephone) {
   if (!FEDAPAY_API_KEY) { console.log("FEDAPAY_API_KEY manquante"); return null; }
-  // Compte FedaPay non encore valide - desactive jusqu'a validation
-  if (FEDAPAY_API_KEY.startsWith("sk_test")) {
-    console.log("FedaPay en mode test - lien desactive jusqu'a validation du compte");
-    return null;
-  }
   try {
-    const res = await fetch("https://api.fedapay.com/v1/transactions", {
-      method: "POST",
-      headers: { "Authorization": "Bearer " + FEDAPAY_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount: montant,
-        currency: { iso: "XOF" },
-        description: "MOHS BOT - " + pack + " - Acompte 50% - " + nom,
-        merchant_reference: "MOHSBOT_" + idClient,
-        callback_url: "https://" + (process.env.RENDER_EXTERNAL_HOSTNAME || "mohs-technologie.onrender.com") + "/paiement-confirme",
-        redirect_url: "https://mohstechnologie.com",
-        customer: {
-          firstname: nom,
-          email: email && email.includes("@") ? email.trim() : undefined,
-          phone_number: {
-            number: String(telephone || "").replace(/[^0-9]/g, ""),
-            country: "BJ"
-          }
+    // Configurer le SDK FedaPay
+    FedaPay.setApiKey(FEDAPAY_API_KEY);
+    FedaPay.setEnvironment("live");
+
+    // Etape 1 : Créer la transaction
+    const transaction = await Transaction.create({
+      description: "MOHS BOT - " + pack + " - " + nom,
+      amount: montant,
+      currency: { iso: "XOF" },
+      callback_url: "https://mohs-technologie.onrender.com/paiement-confirme",
+      customer: {
+        firstname: nom,
+        email: email && email.includes("@") ? email.trim() : "client@mohstechnologie.com",
+        phone_number: {
+          number: String(telephone || "").replace(/[^0-9]/g, ""),
+          country: "BJ"
         }
-      })
+      }
     });
-    const data = await res.json();
-    console.log("FedaPay response: " + JSON.stringify(data));
-    const transaction = data["v1/transaction"];
-    if (transaction && transaction.payment_url) return transaction.payment_url;
-    if (transaction && transaction.payment_token) return "https://process.fedapay.com/" + transaction.payment_token;
-    return null;
+
+    console.log("FedaPay transaction creee ID: " + transaction.id);
+
+    // Etape 2 : Générer le token
+    const token = await transaction.generateToken();
+    console.log("FedaPay token: " + JSON.stringify(token));
+
+    return token.url || ("https://process.fedapay.com/" + token.token);
+
   } catch(e) { console.error("FedaPay:", e.message); return null; }
 }
 
@@ -350,7 +347,7 @@ app.post("/webhook", async (req, res) => {
     }
 
     // FICHE CLIENT
-    if (text.toLowerCase().startsWith("client ")) {
+    if (["client","fiche","voir","chercher","trouver","info"].some(m => text.toLowerCase().startsWith(m + " ")) && !text.toLowerCase().startsWith("clients")) {
       const recherche = text.split(" ").slice(1).join(" ").trim();
       const result    = await callSheet("get_client", { id: recherche, telephone: recherche });
       if (result.status !== "ok") { await send(chatId, "Client introuvable : " + recherche); return; }
@@ -404,18 +401,44 @@ app.post("/webhook", async (req, res) => {
     }
 
     // RENOUVELER
-    if (text.toLowerCase().startsWith("renouveler ")) {
+    if (["renouveler","renouvellement","reabonner","reabonnement","prolonger","prolongation","reconduire","reconduction","relancer"].some(m => text.toLowerCase().startsWith(m + " "))) {
       const parts  = text.split(" ");
       const id     = parts[1]?.trim();
       const nbMois = parseInt(parts[2]) || 1;
-      const result = await callSheet("renouveler", { id_client: id, moyen: "Manuel", nb_mois: nbMois });
+
+      if (!id) { await send(chatId, "Format : renouveler [ID] [nb mois optionnel]\n\nEx: renouveler MT-X7K2P\nEx: renouveler MT-X7K2P 3"); return; }
+
+      await send(chatId, "Renouvellement de " + id + " en cours...");
+
+      // Récupérer infos client pour FedaPay
+      const client = await callSheet("get_client", { id });
+      if (client.status !== "ok") { await send(chatId, "Client introuvable : " + id); return; }
+
+      // Prolonger la date dans Google Sheets
+      const result = await callSheet("renouveler", { id_client: id, moyen: "FedaPay", nb_mois: nbMois });
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
-      await send(chatId, "Renouvellement effectue !\n\nNom : " + result.nom + "\nID : " + id + "\nDuree : " + nbMois + " mois\nNouvelle fin : " + result.nouvelle_fin + "\nMontant : " + Number(result.montant * nbMois).toLocaleString("fr-FR") + " FCFA");
+
+      const montantTotal = Number(client.montant) * nbMois;
+
+      // Générer lien FedaPay
+      let lienPaiement = null;
+      if (FEDAPAY_API_KEY) {
+        lienPaiement = await genererLienPaiement(id + "_RNW", montantTotal, client.nom, client.pack, client.email, client.telephone);
+      }
+
+      let msg = "Renouvellement enregistre !\n\n";
+      msg += "Nom : " + result.nom + "\n";
+      msg += "ID : " + id + "\n";
+      msg += "Duree : " + nbMois + " mois\n";
+      msg += "Nouvelle fin : " + result.nouvelle_fin + "\n";
+      msg += "Montant : " + montantTotal.toLocaleString("fr-FR") + " FCFA\n\n";
+      msg += lienPaiement ? "Lien FedaPay :\n" + lienPaiement : "Lien FedaPay non genere";
+      await send(chatId, msg);
       return;
     }
 
     // SUSPENDRE
-    if (text.toLowerCase().startsWith("suspendre ")) {
+    if (["suspendre","suspension","bloquer","desactiver","arreter"].some(m => text.toLowerCase().startsWith(m + " "))) {
       const id = text.split(" ")[1]?.trim();
       const result = await callSheet("suspendre", { id_client: id });
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
@@ -424,7 +447,7 @@ app.post("/webhook", async (req, res) => {
     }
 
     // REACTIVER
-    if (text.toLowerCase().startsWith("reactiver ")) {
+    if (["reactiver","reactivation","activer","activation","debloquer","relancer"].some(m => text.toLowerCase().startsWith(m + " "))) {
       const id = text.split(" ")[1]?.trim();
       const result = await callSheet("reactiver", { id_client: id });
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
@@ -490,7 +513,7 @@ app.post("/webhook", async (req, res) => {
     }
 
     // SOLDE
-    if (text.toLowerCase().startsWith("solde ")) {
+    if (["solde","reste","restant","complement","paiement final","payer le reste"].some(m => text.toLowerCase().startsWith(m + " "))) {
       const id = text.split(" ")[1]?.trim();
       if (!id) { await send(chatId, "Format : solde [ID]\n\nEx: solde MT-X7K2P"); return; }
 
