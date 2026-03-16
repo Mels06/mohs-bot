@@ -276,32 +276,48 @@ app.post("/webhook", async (req, res) => {
 
     // NOUVEAU CLIENT
     if (text.toLowerCase().startsWith("nouveau ")) {
-      const allParts = text.trim().split(" ").filter(p => p.trim());
+      // Format : nouveau [nom], [entreprise optionnelle], [tel] [email] [pack] [plateforme] [nb_mois]
+      // Extraire la partie apres "nouveau "
+      const rawText = text.trim().substring(8).trim();
 
-      // Trouver l email (contient @)
-      const emailIndex = allParts.findIndex(p => p.includes("@"));
-      if (emailIndex === -1) { await send(chatId, "Email introuvable. Incluez une adresse email valide."); return; }
-      const email = allParts[emailIndex];
+      // Trouver email
+      const allWords = rawText.split(" ");
+      const emailWord = allWords.find(w => w.includes("@"));
+      if (!emailWord) { await send(chatId, "Email introuvable. Format :\nnouveau Melissa AKPOVI, WEBCOOM SAS, 0196146200 email 1 telegram"); return; }
 
-      // Trouver le telephone (juste avant email, commence par des chiffres)
-      const avant = allParts.slice(1, emailIndex); // entre "nouveau" et email
-      if (avant.length < 2) { await send(chatId, "Format :\nnouveau [nom] [tel] [email] [pack] [plateforme]\nnouveau [nom] [entreprise] [tel] [email] [pack] [plateforme]"); return; }
+      const emailIndex = rawText.indexOf(emailWord);
+      const avantEmail = rawText.substring(0, emailIndex).trim();
+      const apresEmail = rawText.substring(emailIndex + emailWord.length).trim().split(" ").filter(p => p);
 
-      const telephone = avant[avant.length - 1]; // dernier mot avant email = tel
+      const email      = emailWord;
+      const packNum    = apresEmail[0];
+      const plateforme = apresEmail[1] || "telegram";
+      const nbMois     = parseInt(apresEmail[2]) || 1;
 
-      // Tout avant le telephone = nom + entreprise (optionnelle)
-      const nomEntreprise = avant.slice(0, -1).join(" ");
+      // Parser avantEmail avec virgules
+      const segments = avantEmail.split(",").map(s => s.trim()).filter(s => s);
 
-      // Detecter si le dernier mot du nomEntreprise est un nom de famille ou entreprise
-      // On garde tout ensemble dans "nom" pour Google Sheets
-      const nom = nomEntreprise;
+      let nom, entreprise, telephone;
 
-      // Apres email = pack, plateforme, nb_mois
-      const apres    = allParts.slice(emailIndex + 1);
-      const packNum  = apres[0];
-      const plateforme = apres[1] || "telegram";
-      const nbMois   = parseInt(apres[2]) || 1;
+      if (segments.length === 3) {
+        // nouveau Melissa AKPOVI, WEBCOOM SAS, 0196146200
+        nom        = segments[0];
+        entreprise = segments[1];
+        telephone  = segments[2];
+      } else if (segments.length === 2) {
+        // nouveau Melissa AKPOVI, 0196146200  (sans entreprise)
+        nom        = segments[0];
+        entreprise = "";
+        telephone  = segments[1];
+      } else {
+        // Pas de virgule - ancien format
+        const parts = avantEmail.split(" ");
+        telephone  = parts[parts.length - 1];
+        nom        = parts.slice(0, -1).join(" ");
+        entreprise = "";
+      }
 
+      if (!nom || !telephone) { await send(chatId, "Format :\nnouveau Melissa AKPOVI, WEBCOOM SAS, 0196146200 email 1 telegram\nnouveau Melissa AKPOVI, 0196146200 email 1 telegram"); return; }
       if (!packNum) { await send(chatId, "Pack manquant. Choisir 1, 2, 3 ou 4."); return; }
       const packInfo = PACKS[packNum];
       if (!packInfo) { await send(chatId, "Pack invalide. Tape 'packs' pour voir les details."); return; }
@@ -315,7 +331,7 @@ app.post("/webhook", async (req, res) => {
       await send(chatId, "Enregistrement de " + nom + " en cours...");
 
       const result = await callSheet("add_client", {
-        id: idClient, nom, telephone, email,
+        id: idClient, nom, entreprise, telephone, email,
         pack: packInfo.nom,
         plateforme: plateforme.charAt(0).toUpperCase() + plateforme.slice(1),
         montant, nb_mois: nbMois
