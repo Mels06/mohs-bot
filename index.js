@@ -124,20 +124,14 @@ async function genererLienPaiement(idClient, montant, nom, pack, email, telephon
 
     // Etape 2 : Générer le token
     const tokenObj = await transaction.generateToken();
-    console.log("FedaPay token obj keys: " + JSON.stringify(Object.keys(tokenObj)));
-    console.log("FedaPay token: " + JSON.stringify(tokenObj));
+    
+    // Convertir en objet plain pour accéder aux propriétés
+    const tokenPlain = JSON.parse(JSON.stringify(tokenObj));
+    console.log("FedaPay token: " + JSON.stringify(tokenPlain));
 
-    // Le SDK retourne l objet avec token et url
-    const tokenStr = tokenObj.token || tokenObj.klass && tokenObj.token;
-    const tokenUrl = tokenObj.url;
-
-    if (tokenUrl) return tokenUrl;
-    if (tokenStr) return "https://process.fedapay.com/" + tokenStr;
-
-    // Fallback : utiliser payment_url de la transaction
-    const updatedTx = await Transaction.retrieve(transaction.id);
-    console.log("FedaPay tx updated: " + JSON.stringify(updatedTx.payment_url));
-    return updatedTx.payment_url || null;
+    if (tokenPlain.url) return tokenPlain.url;
+    if (tokenPlain.token) return "https://process.fedapay.com/" + tokenPlain.token;
+    return null;
 
   } catch(e) { console.error("FedaPay:", e.message); return null; }
 }
@@ -419,32 +413,45 @@ app.post("/webhook", async (req, res) => {
 
       if (!id) { await send(chatId, "Format : renouveler [ID] [nb mois optionnel]\n\nEx: renouveler MT-X7K2P\nEx: renouveler MT-X7K2P 3"); return; }
 
-      await send(chatId, "Renouvellement de " + id + " en cours...");
+      await send(chatId, "Preparation du renouvellement de " + id + " en cours...");
 
-      // Récupérer infos client pour FedaPay
+      // Récupérer infos client
       const client = await callSheet("get_client", { id });
       if (client.status !== "ok") { await send(chatId, "Client introuvable : " + id); return; }
 
-      // Prolonger la date dans Google Sheets
-      const result = await callSheet("renouveler", { id_client: id, moyen: "FedaPay", nb_mois: nbMois });
-      if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
-
       const montantTotal = Number(client.montant) * nbMois;
 
-      // Générer lien FedaPay
+      // Générer lien FedaPay D ABORD
       let lienPaiement = null;
       if (FEDAPAY_API_KEY) {
-        const refRnw = id.replace("MT-", "RNW-") + "-" + Date.now().toString().slice(-4);
+        const refRnw = "RNW" + id.replace("MT-", "") + Date.now().toString().slice(-4);
         lienPaiement = await genererLienPaiement(refRnw, montantTotal, client.nom, client.pack, client.email, client.telephone);
       }
 
-      let msg = "Renouvellement enregistre !\n\n";
-      msg += "Nom : " + result.nom + "\n";
+      if (!lienPaiement) {
+        await send(chatId, "Erreur : impossible de generer le lien FedaPay. Reessaie.");
+        return;
+      }
+
+      // Prolonger la date SEULEMENT si lien genere
+      const result = await callSheet("renouveler", { id_client: id, moyen: "FedaPay", nb_mois: nbMois });
+      if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
+
+      // Envoyer mail au client avec lien
+      if (client.email) {
+        await envoyerMailSolde({
+          email: client.email, nom: client.nom, id,
+          pack: client.pack, montant: montantTotal, solde: montantTotal, lienPaiement
+        });
+      }
+
+      let msg = "Renouvellement en attente de paiement\n\n";
+      msg += "Nom : " + client.nom + "\n";
       msg += "ID : " + id + "\n";
       msg += "Duree : " + nbMois + " mois\n";
       msg += "Nouvelle fin : " + result.nouvelle_fin + "\n";
       msg += "Montant : " + montantTotal.toLocaleString("fr-FR") + " FCFA\n\n";
-      msg += lienPaiement ? "Lien FedaPay :\n" + lienPaiement : "Lien FedaPay non genere";
+      msg += "Lien FedaPay envoye au client :\n" + lienPaiement;
       await send(chatId, msg);
       return;
     }
