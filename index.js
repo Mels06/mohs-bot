@@ -110,11 +110,7 @@ async function genererLienPaiement(reference, montant, nom, pack, email, telepho
       merchant_reference: uniqueRef,
       customer: {
         firstname: nom,
-        email: email && email.includes("@") ? email.trim() : "client@mohstechnologie.com",
-        phone_number: {
-          number: String(telephone || "").replace(/[^0-9]/g, ""),
-          country: "BJ"
-        }
+        email: email && email.includes("@") ? email.trim() : "client@mohstechnologie.com"
       }
     });
 
