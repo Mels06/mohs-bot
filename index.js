@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbwaBUlIufwOOd7bIgwyfcBOyRJdocCkLNV-btjWCYGNp1DXMKTCnmQLqW1g2C9V0tV4/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbyaWjtc6jQJXGBtaM03jnyDvpWU25y_F4N7tysTj9-GieCcvqiizBFVW5P1u2fUnQ4f/exec";
 const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
@@ -299,22 +299,33 @@ app.post("/webhook", async (req, res) => {
 
       let nom, entreprise, telephone;
 
-      if (segments.length === 3) {
-        // nouveau Melissa AKPOVI, WEBCOOM SAS, 0196146200
+      let nomBot = "";
+      if (segments.length === 4) {
+        // nouveau Melissa AKPOVI, WEBCOOM SAS, MonBot, 0196146200
         nom        = segments[0];
         entreprise = segments[1];
+        nomBot     = segments[2];
+        telephone  = segments[3];
+      } else if (segments.length === 3) {
+        // nouveau Melissa AKPOVI, WEBCOOM SAS, 0196146200
+        // OU nouveau Melissa AKPOVI, MonBot, 0196146200
+        // Le dernier segment est toujours le tel
+        nom        = segments[0];
+        entreprise = segments[1];
+        nomBot     = "";
         telephone  = segments[2];
       } else if (segments.length === 2) {
-        // nouveau Melissa AKPOVI, 0196146200  (sans entreprise)
+        // nouveau Melissa AKPOVI, 0196146200
         nom        = segments[0];
         entreprise = "";
+        nomBot     = "";
         telephone  = segments[1];
       } else {
-        // Pas de virgule - ancien format
         const parts = avantEmail.split(" ");
         telephone  = parts[parts.length - 1];
         nom        = parts.slice(0, -1).join(" ");
         entreprise = "";
+        nomBot     = "";
       }
 
       if (!nom || !telephone) { await send(chatId, "Format :\nnouveau Melissa AKPOVI, WEBCOOM SAS, 0196146200 email 1 telegram\nnouveau Melissa AKPOVI, 0196146200 email 1 telegram"); return; }
@@ -331,7 +342,7 @@ app.post("/webhook", async (req, res) => {
       await send(chatId, "Enregistrement de " + nom + " en cours...");
 
       const result = await callSheet("add_client", {
-        id: idClient, nom, entreprise, telephone, email,
+        id: idClient, nom, entreprise, nom_bot: nomBot, telephone, email,
         pack: packInfo.nom,
         plateforme: plateforme.charAt(0).toUpperCase() + plateforme.slice(1),
         montant, nb_mois: nbMois
@@ -359,6 +370,7 @@ app.post("/webhook", async (req, res) => {
       msg += "Email : " + email + "\n";
       msg += "Pack : " + packInfo.nom + "\n";
       msg += "Plateforme : " + plateforme + "\n";
+      if (nomBot) msg += "Nom du bot : " + nomBot + "\n";
       msg += "Duree : " + nbMois + " mois\n";
       msg += "Montant total : " + montantTotal.toLocaleString("fr-FR") + " FCFA\n";
       msg += "Acompte (50%) : " + acompte.toLocaleString("fr-FR") + " FCFA\n";
@@ -582,6 +594,18 @@ app.post("/webhook", async (req, res) => {
       }
       msg += "\nPar plateforme :\n  Telegram : " + (result.par_plateforme?.telegram||0) + "\n  WhatsApp : " + (result.par_plateforme?.whatsapp||0);
       await send(chatId, msg);
+      return;
+    }
+
+    // NOMBOT
+    if (text.toLowerCase().startsWith("nombot ")) {
+      const parts   = text.split(" ");
+      const id      = parts[1]?.trim();
+      const nomBot  = parts.slice(2).join(" ").trim();
+      if (!id || !nomBot) { await send(chatId, "Format : nombot [ID] [nom du bot]\n\nEx: nombot MT-X7K2P MonSuperBot"); return; }
+      const result = await callSheet("update_nombot", { id_client: id, nom_bot: nomBot });
+      if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
+      await send(chatId, "Nom du bot mis a jour !\n\nID : " + id + "\nNom du bot : " + nomBot);
       return;
     }
 
