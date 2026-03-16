@@ -276,14 +276,33 @@ app.post("/webhook", async (req, res) => {
 
     // NOUVEAU CLIENT
     if (text.toLowerCase().startsWith("nouveau ")) {
-      const parts = text.split(" ").filter(p => p.trim());
-      if (parts.length < 6) {
-        await send(chatId, "Format :\nnouveau [nom] [tel] [email] [pack 1-4] [telegram/whatsapp] [nb_mois optionnel]");
-        return;
-      }
-      const [, nom, telephone, email, packNum, plateforme = "telegram"] = parts;
-      const nbMois = parseInt(parts[6]) || 1;
-      if (!email.includes("@")) { await send(chatId, "Email invalide."); return; }
+      const allParts = text.trim().split(" ").filter(p => p.trim());
+
+      // Trouver l email (contient @)
+      const emailIndex = allParts.findIndex(p => p.includes("@"));
+      if (emailIndex === -1) { await send(chatId, "Email introuvable. Incluez une adresse email valide."); return; }
+      const email = allParts[emailIndex];
+
+      // Trouver le telephone (juste avant email, commence par des chiffres)
+      const avant = allParts.slice(1, emailIndex); // entre "nouveau" et email
+      if (avant.length < 2) { await send(chatId, "Format :\nnouveau [nom] [tel] [email] [pack] [plateforme]\nnouveau [nom] [entreprise] [tel] [email] [pack] [plateforme]"); return; }
+
+      const telephone = avant[avant.length - 1]; // dernier mot avant email = tel
+
+      // Tout avant le telephone = nom + entreprise (optionnelle)
+      const nomEntreprise = avant.slice(0, -1).join(" ");
+
+      // Detecter si le dernier mot du nomEntreprise est un nom de famille ou entreprise
+      // On garde tout ensemble dans "nom" pour Google Sheets
+      const nom = nomEntreprise;
+
+      // Apres email = pack, plateforme, nb_mois
+      const apres    = allParts.slice(emailIndex + 1);
+      const packNum  = apres[0];
+      const plateforme = apres[1] || "telegram";
+      const nbMois   = parseInt(apres[2]) || 1;
+
+      if (!packNum) { await send(chatId, "Pack manquant. Choisir 1, 2, 3 ou 4."); return; }
       const packInfo = PACKS[packNum];
       if (!packInfo) { await send(chatId, "Pack invalide. Tape 'packs' pour voir les details."); return; }
 
