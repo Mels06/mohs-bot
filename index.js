@@ -101,7 +101,7 @@ async function genererLienPaiement(reference, montant, nom, pack, email, telepho
     FedaPay.setApiKey(FEDAPAY_API_KEY);
     FedaPay.setEnvironment("live");
 
-    const uniqueRef = "MOHSBOT_" + reference;
+    const uniqueRef = "MOHSBOT_" + reference + "_" + Date.now();
     const transaction = await Transaction.create({
       description: "MOHS BOT - " + pack + " - " + nom,
       amount: montant,
@@ -410,7 +410,7 @@ app.post("/webhook", async (req, res) => {
       // 1. Générer lien FedaPay AVANT tout
       let lienPaiement = null;
       if (FEDAPAY_API_KEY) {
-        lienPaiement = await genererLienPaiement(id + "_RNW", montantTotal, client.nom, client.pack, client.email, client.telephone);
+        lienPaiement = await genererLienPaiement(id, montantTotal, client.nom, client.pack, client.email, client.telephone);
       }
 
       if (!lienPaiement) { await send(chatId, "Erreur generation lien FedaPay. Reessaie."); return; }
