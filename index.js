@@ -103,11 +103,11 @@ async function genererLienPaiement(reference, montant, nom, pack, email, telepho
     FedaPay.setApiKey(FEDAPAY_API_KEY);
     FedaPay.setEnvironment("live");
 
-    const uniqueRef = "MOHSBOT_" + reference + "_" + Date.now();
     const transaction = await Transaction.create({
       description: "MOHS BOT - " + pack + " - " + nom,
       amount: montant,
       currency: { iso: "XOF" },
+      merchant_reference: "MOHSBOT_" + reference,
       callback_url: "https://mohs-technologie.onrender.com/paiement-confirme",
       merchant_reference: uniqueRef,
       customer: {
@@ -754,12 +754,14 @@ app.post("/paiement-confirme", async (req, res) => {
     if (event.name !== "transaction.approved") return;
     const transaction = event.entity;
     const ref = transaction.merchant_reference || "";
-    if (!ref.startsWith("MOHSBOT_")) return;
-    // Format: MOHSBOT_MT-XXXXX_timestamp - on extrait juste l ID client
-    // Format MOHSBOT_MT-XXXXX_TYPE
-    const parts = ref.replace("MOHSBOT_", "").split("_");
-    const idClient = parts[0] + (parts[1] ? "_" + parts[1] : "");
-    const typePaiement = parts[2] || "ACO";
+    console.log("Webhook FedaPay ref: " + ref);
+    if (!ref.startsWith("MOHSBOT_")) { console.log("Ref ignoree: " + ref); return; }
+    // Format: MOHSBOT_MT-XXXXX_TYPE_TIMESTAMP
+    // Extraire MT-XXXXX : 2eme segment apres split par _
+    const segments = ref.split("_");
+    // segments[0] = MOHSBOT, segments[1] = MT, segments[2] = XXXXX
+    const idClient = segments[1] + "-" + segments[2]; // MT-XXXXX
+    console.log("Webhook idClient extrait: " + idClient);
     const result = await callSheet("update_abonnement", { id_client: idClient, ref_paiement: transaction.id, moyen: "FedaPay" });
     if (result.status === "ok") {
       await send(ADMIN_CHAT_ID, "Paiement recu !\n\nNom : " + result.nom + "\nID : " + idClient + "\nMontant : " + Number(result.montant).toLocaleString("fr-FR") + " FCFA\nValide jusqu'au : " + result.nouvelle_fin);
