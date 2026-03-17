@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbyaWjtc6jQJXGBtaM03jnyDvpWU25y_F4N7tysTj9-GieCcvqiizBFVW5P1u2fUnQ4f/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbwdZCwr9NhcgJuKs2LIdXllHc_XewRHUQ9zs_H4FHjEuavizSWp1vIHwEYijwMig4s/exec";
 const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
@@ -67,6 +67,8 @@ function repondreConversation(intent, prenom) {
       "renouveler [ID] / renouveler [ID] 3\n" +
       "suspendre [ID] / reactiver [ID]\n" +
       "solde [ID] - Envoyer lien solde au client\n" +
+      "bots - Liste bots a implementer\n" +
+      "bot fait [ID] / bot encours [ID]\n" +
       "stats - Tableau de bord\n" +
       "ca mars / ca 2025 / ca 01/01/2025 31/03/2025\n" +
       "commandes / commandes aujourd'hui\n" +
@@ -594,6 +596,133 @@ app.post("/webhook", async (req, res) => {
       }
       msg += "\nPar plateforme :\n  Telegram : " + (result.par_plateforme?.telegram||0) + "\n  WhatsApp : " + (result.par_plateforme?.whatsapp||0);
       await send(chatId, msg);
+      return;
+    }
+
+    // BOTS A IMPLEMENTER
+    if (text.toLowerCase() === "bots" || text.toLowerCase().startsWith("bots ")) {
+      const filtre = text.toLowerCase().replace("bots","").trim() || "tous";
+      const result = await callSheet("get_bots", { filtre });
+      if (result.status !== "ok" || result.total === 0) { await send(chatId, "Aucun bot trouve."); return; }
+      let msg = "Bots a implementer - " + filtre.toUpperCase() + " (" + result.total + ")\n\n";
+      result.bots.forEach(b => {
+        const emoji = b.statut === "LIVRE" ? "OK" : b.statut === "EN COURS" ? "..." : "!";
+        msg += emoji + " " + b.id + " " + b.nom + "\n";
+        msg += "   " + b.pack + " | " + b.plateforme + "\n";
+        msg += "   Bot : " + (b.nom_bot || "A DEFINIR") + "\n";
+        msg += "   Statut : " + b.statut + "\n\n";
+      });
+      msg += "Commandes :\nbot fait [ID]\nbot encours [ID]";
+      await send(chatId, msg);
+      return;
+    }
+
+    // MISE A JOUR STATUT BOT
+    if (text.toLowerCase().startsWith("bot ")) {
+      const parts  = text.split(" ");
+      const action = parts[1]?.toLowerCase();
+      const id     = parts[2]?.trim();
+      if (!id) { await send(chatId, "Format :\nbot fait [ID]\nbot encours [ID]\nbot fait [ID] [nom du bot]"); return; }
+      const nomBot = parts.slice(3).join(" ").trim() || null;
+      let statut = "";
+      if (action === "fait" || action === "livre") statut = "LIVRE";
+      else if (action === "encours" || action === "cours") statut = "EN COURS";
+      else { await send(chatId, "Action inconnue. Utilise : bot fait [ID] ou bot encours [ID]"); return; }
+      const result = await callSheet("update_bot_statut", { id_client: id, statut, nom_bot: nomBot });
+      if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
+      let msg = "Bot mis a jour !\n\nID : " + id + "\nNom : " + result.nom + "\nStatut : " + statut;
+      if (nomBot) msg += "\nNom du bot : " + nomBot;
+      await send(chatId, msg);
+      return;
+    }
+
+    // BOTS A IMPLEMENTER
+    if (text.toLowerCase() === "bots" || text.toLowerCase().startsWith("bots ")) {
+      const filtre = text.toLowerCase().startsWith("bots ") ? text.split(" ").slice(1).join(" ").trim() : "a faire";
+      const result = await callSheet("get_bots", { filtre });
+      if (result.status !== "ok" || result.total === 0) { await send(chatId, "Aucun bot trouve pour : " + filtre); return; }
+      let msg = "Bots - " + filtre.toUpperCase() + " (" + result.total + ")\n\n";
+      result.bots.forEach(b => {
+        msg += b.id + " " + b.nom + "\n";
+        msg += "   Bot : " + (b.nom_bot || "Non defini") + "\n";
+        msg += "   " + b.pack + " | " + b.plateforme + " | " + b.statut + "\n";
+        if (b.entreprise) msg += "   " + b.entreprise + "\n";
+        msg += "\n";
+      });
+      msg += "Commandes :\nbot encours [ID]\nbot fait [ID]";
+      await send(chatId, msg);
+      return;
+    }
+
+    // MAJ STATUT BOT
+    if (text.toLowerCase().startsWith("bot ")) {
+      const parts   = text.split(" ");
+      const action  = parts[1]?.toLowerCase();
+      const id      = parts[2]?.trim();
+      const nomBot  = parts.slice(3).join(" ").trim();
+
+      if (!id) { await send(chatId, "Format :\nbot encours MT-XXXXX\nbot fait MT-XXXXX\nbot fait MT-XXXXX NomDuBot"); return; }
+
+      let statut = "";
+      if (action === "fait" || action === "livre" || action === "done") statut = "LIVRE";
+      else if (action === "encours" || action === "cours") statut = "EN COURS";
+      else if (action === "refaire" || action === "afaire") statut = "A FAIRE";
+      else { await send(chatId, "Action inconnue. Utilise : bot encours [ID] ou bot fait [ID]"); return; }
+
+      const result = await callSheet("update_bot_statut", { id_client: id, statut, nom_bot: nomBot || null });
+      if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
+      let msg = "Bot mis a jour !\n\nID : " + id + "\nNom : " + result.nom + "\nStatut : " + statut;
+      if (nomBot) msg += "\nNom du bot : " + nomBot;
+      await send(chatId, msg);
+      return;
+    }
+
+    // BOTS A IMPLEMENTER
+    if (text.toLowerCase() === "bots" || text.toLowerCase().startsWith("bots ")) {
+      const filtre = text.toLowerCase().replace("bots","").trim() || "tous";
+      const filtreMap = { "afaire":"afaire", "a faire":"afaire", "encours":"encours", "en cours":"encours", "livre":"livre", "livres":"livre" };
+      const f = filtreMap[filtre] || "tous";
+      const result = await callSheet("get_bots", { filtre: f });
+      if (result.status !== "ok" || result.total === 0) { await send(chatId, "Aucun bot trouve."); return; }
+      let msg = "BOTS A IMPLEMENTER (" + result.total + ")\n\n";
+      result.bots.forEach(b => {
+        const emoji = b.statut === "LIVRE" ? "OK" : b.statut === "EN COURS" ? "..." : "TODO";
+        msg += "[" + emoji + "] " + b.id + " - " + b.nom + "\n";
+        msg += "   " + b.pack + " | " + b.plateforme + "\n";
+        if (b.nom_bot)     msg += "   Bot : " + b.nom_bot + "\n";
+        if (b.entreprise)  msg += "   Entreprise : " + b.entreprise + "\n";
+        if (b.description) msg += "   Info : " + b.description + "\n";
+        msg += "\n";
+      });
+      msg += "Commandes :\nbot encours [ID]\nbot fait [ID]";
+      await send(chatId, msg);
+      return;
+    }
+
+    // BOT STATUT
+    if (text.toLowerCase().startsWith("bot ")) {
+      const parts   = text.split(" ");
+      const action  = parts[1]?.toLowerCase();
+      const id      = parts[2]?.trim();
+      if (!id) { await send(chatId, "Format :\nbot encours MT-XXXXX\nbot fait MT-XXXXX"); return; }
+      const statutMap = { "fait":"LIVRE", "livre":"LIVRE", "encours":"EN COURS", "en cours":"EN COURS", "afaire":"A FAIRE" };
+      const statut = statutMap[action];
+      if (!statut) { await send(chatId, "Action invalide. Utiliser : fait, encours, afaire"); return; }
+      const result = await callSheet("update_bot_statut", { id_client: id, statut });
+      if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
+      await send(chatId, "Bot mis a jour !\n\nID : " + id + "\nNom : " + result.nom + "\nStatut : " + statut);
+      return;
+    }
+
+    // DESCRIPTION CLIENT
+    if (text.toLowerCase().startsWith("description ")) {
+      const parts       = text.split(" ");
+      const id          = parts[1]?.trim();
+      const description = parts.slice(2).join(" ").trim();
+      if (!id || !description) { await send(chatId, "Format : description [ID] [description]\n\nEx: description MT-X7K2P Vente chaussures, prix 5000-15000 FCFA"); return; }
+      const result = await callSheet("update_description", { id_client: id, description });
+      if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
+      await send(chatId, "Description mise a jour !\n\nID : " + id + "\nNom : " + result.nom + "\nDescription : " + description);
       return;
     }
 
