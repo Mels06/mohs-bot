@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbxMAqw97qww0rQXce-wn4RIvD30HgZSwHV_PpVJbnNeqecwQqcgjmSHCvNOz38-92mN/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbzrhPg2mTy37ljFqA-CdDg9oYk7j8SvM26iLSGJRo8s2Ed6Nu3cbyJf52cyRekl7myt/exec";
 const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
@@ -599,6 +599,91 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
+    // LIVRER BOT
+    if (text.toLowerCase().startsWith("livrer ")) {
+      const parts  = text.split(" ");
+      const id     = parts[1]?.trim();
+      const nbMois = parseInt(parts[2]) || 1;
+      if (!id) { await send(chatId, "Format : livrer [ID] [nb mois]\n\nEx: livrer MT-X7K2P\nEx: livrer MT-X7K2P 3"); return; }
+
+      await send(chatId, "Livraison du bot pour " + id + " en cours...");
+
+      const result = await callSheet("livrer", { id_client: id, nb_mois: nbMois });
+      if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
+
+      // Envoyer mail de confirmation au client
+      if (result.email) {
+        const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
+  <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;">
+    <tr><td style="background:#1a1a2e;padding:30px;text-align:center;">
+      <h1 style="color:#2f74a3;margin:0;">MOHS TECHNOLOGIE</h1>
+      <p style="color:#aaa;margin:5px 0 0;font-size:13px;">Solutions Digitales et Bots Intelligents</p>
+    </td></tr>
+    <tr><td style="padding:30px;">
+      <h2 style="color:#1a1a2e;">Votre bot est pret, ${result.nom} !</h2>
+      <p style="color:#555;">Votre bot a ete configure et est desormais actif. Voici les details de votre abonnement :</p>
+      <table width="100%" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:20px 0;">
+        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;">ABONNEMENT ACTIF</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;width:45%;">ID Client</td>
+            <td style="padding:12px 15px;border-bottom:1px solid #eee;"><span style="background:#1a1a2e;color:#2f74a3;padding:4px 12px;border-radius:15px;font-family:monospace;font-weight:bold;">${id}</span></td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Pack</td>
+            <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${result.pack}</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Plateforme</td>
+            <td style="padding:12px 15px;border-bottom:1px solid #eee;">${result.plateforme}</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Date de debut</td>
+            <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${result.date_debut}</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;">Valide jusqu'au</td>
+            <td style="padding:12px 15px;font-weight:bold;color:#2f74a3;">${result.date_fin}</td></tr>
+      </table>
+      <p style="color:#555;font-size:14px;">Pour tout support : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>
+    </td></tr>
+    <tr><td style="background:#1a1a2e;padding:20px;text-align:center;">
+      <p style="color:#2f74a3;margin:0;font-weight:bold;">MOHS TECHNOLOGIE</p>
+    </td></tr>
+  </table>
+</body></html>`;
+
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>",
+            to: [result.email],
+            subject: "Votre bot est pret ! - MOHS TECHNOLOGIE",
+            html
+          })
+        });
+      }
+
+      // Générer lien FedaPay pour le solde
+      let lienSolde = null;
+      const montantTotal = Number(result.montant) * nbMois;
+      const solde = Math.round(montantTotal / 2);
+      if (FEDAPAY_API_KEY && result.email) {
+        lienSolde = await genererLienPaiement(id + "-S", solde, result.nom, result.pack, result.email, "");
+      }
+
+      // Envoyer mail avec confirmation + lien solde
+      if (result.email) {
+        await envoyerMailSolde({
+          email: result.email, nom: result.nom, id,
+          pack: result.pack, montant: montantTotal, solde,
+          lienPaiement: lienSolde, sujet: "solde"
+        });
+      }
+
+      let msg = "Bot livre !\n\n";
+      msg += "ID : " + id + "\n";
+      msg += "Nom : " + result.nom + "\n";
+      msg += "Pack : " + result.pack + "\n";
+      msg += "Date debut : " + result.date_debut + "\n";
+      msg += "Date fin : " + result.date_fin + "\n";
+      msg += "Solde a payer : " + solde.toLocaleString("fr-FR") + " FCFA\n\n";
+      msg += lienSolde ? "Lien solde envoye au client :\n" + lienSolde : "Lien solde non genere";
+      await send(chatId, msg);
+      return;
+    }
+
     // BOTS A IMPLEMENTER
     if (text.toLowerCase() === "bots" || text.toLowerCase().startsWith("bots ")) {
       const filtre = text.toLowerCase().replace("bots","").trim() || "tous";
@@ -632,6 +717,91 @@ app.post("/webhook", async (req, res) => {
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
       let msg = "Bot mis a jour !\n\nID : " + id + "\nNom : " + result.nom + "\nStatut : " + statut;
       if (nomBot) msg += "\nNom du bot : " + nomBot;
+      await send(chatId, msg);
+      return;
+    }
+
+    // LIVRER BOT
+    if (text.toLowerCase().startsWith("livrer ")) {
+      const parts  = text.split(" ");
+      const id     = parts[1]?.trim();
+      const nbMois = parseInt(parts[2]) || 1;
+      if (!id) { await send(chatId, "Format : livrer [ID] [nb mois]\n\nEx: livrer MT-X7K2P\nEx: livrer MT-X7K2P 3"); return; }
+
+      await send(chatId, "Livraison du bot pour " + id + " en cours...");
+
+      const result = await callSheet("livrer", { id_client: id, nb_mois: nbMois });
+      if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
+
+      // Envoyer mail de confirmation au client
+      if (result.email) {
+        const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
+  <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;">
+    <tr><td style="background:#1a1a2e;padding:30px;text-align:center;">
+      <h1 style="color:#2f74a3;margin:0;">MOHS TECHNOLOGIE</h1>
+      <p style="color:#aaa;margin:5px 0 0;font-size:13px;">Solutions Digitales et Bots Intelligents</p>
+    </td></tr>
+    <tr><td style="padding:30px;">
+      <h2 style="color:#1a1a2e;">Votre bot est pret, ${result.nom} !</h2>
+      <p style="color:#555;">Votre bot a ete configure et est desormais actif. Voici les details de votre abonnement :</p>
+      <table width="100%" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:20px 0;">
+        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;">ABONNEMENT ACTIF</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;width:45%;">ID Client</td>
+            <td style="padding:12px 15px;border-bottom:1px solid #eee;"><span style="background:#1a1a2e;color:#2f74a3;padding:4px 12px;border-radius:15px;font-family:monospace;font-weight:bold;">${id}</span></td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Pack</td>
+            <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${result.pack}</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Plateforme</td>
+            <td style="padding:12px 15px;border-bottom:1px solid #eee;">${result.plateforme}</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Date de debut</td>
+            <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${result.date_debut}</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;">Valide jusqu'au</td>
+            <td style="padding:12px 15px;font-weight:bold;color:#2f74a3;">${result.date_fin}</td></tr>
+      </table>
+      <p style="color:#555;font-size:14px;">Pour tout support : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>
+    </td></tr>
+    <tr><td style="background:#1a1a2e;padding:20px;text-align:center;">
+      <p style="color:#2f74a3;margin:0;font-weight:bold;">MOHS TECHNOLOGIE</p>
+    </td></tr>
+  </table>
+</body></html>`;
+
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>",
+            to: [result.email],
+            subject: "Votre bot est pret ! - MOHS TECHNOLOGIE",
+            html
+          })
+        });
+      }
+
+      // Générer lien FedaPay pour le solde
+      let lienSolde = null;
+      const montantTotal = Number(result.montant) * nbMois;
+      const solde = Math.round(montantTotal / 2);
+      if (FEDAPAY_API_KEY && result.email) {
+        lienSolde = await genererLienPaiement(id + "-S", solde, result.nom, result.pack, result.email, "");
+      }
+
+      // Envoyer mail avec confirmation + lien solde
+      if (result.email) {
+        await envoyerMailSolde({
+          email: result.email, nom: result.nom, id,
+          pack: result.pack, montant: montantTotal, solde,
+          lienPaiement: lienSolde, sujet: "solde"
+        });
+      }
+
+      let msg = "Bot livre !\n\n";
+      msg += "ID : " + id + "\n";
+      msg += "Nom : " + result.nom + "\n";
+      msg += "Pack : " + result.pack + "\n";
+      msg += "Date debut : " + result.date_debut + "\n";
+      msg += "Date fin : " + result.date_fin + "\n";
+      msg += "Solde a payer : " + solde.toLocaleString("fr-FR") + " FCFA\n\n";
+      msg += lienSolde ? "Lien solde envoye au client :\n" + lienSolde : "Lien solde non genere";
       await send(chatId, msg);
       return;
     }
@@ -673,6 +843,91 @@ app.post("/webhook", async (req, res) => {
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
       let msg = "Bot mis a jour !\n\nID : " + id + "\nNom : " + result.nom + "\nStatut : " + statut;
       if (nomBot) msg += "\nNom du bot : " + nomBot;
+      await send(chatId, msg);
+      return;
+    }
+
+    // LIVRER BOT
+    if (text.toLowerCase().startsWith("livrer ")) {
+      const parts  = text.split(" ");
+      const id     = parts[1]?.trim();
+      const nbMois = parseInt(parts[2]) || 1;
+      if (!id) { await send(chatId, "Format : livrer [ID] [nb mois]\n\nEx: livrer MT-X7K2P\nEx: livrer MT-X7K2P 3"); return; }
+
+      await send(chatId, "Livraison du bot pour " + id + " en cours...");
+
+      const result = await callSheet("livrer", { id_client: id, nb_mois: nbMois });
+      if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
+
+      // Envoyer mail de confirmation au client
+      if (result.email) {
+        const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
+  <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;">
+    <tr><td style="background:#1a1a2e;padding:30px;text-align:center;">
+      <h1 style="color:#2f74a3;margin:0;">MOHS TECHNOLOGIE</h1>
+      <p style="color:#aaa;margin:5px 0 0;font-size:13px;">Solutions Digitales et Bots Intelligents</p>
+    </td></tr>
+    <tr><td style="padding:30px;">
+      <h2 style="color:#1a1a2e;">Votre bot est pret, ${result.nom} !</h2>
+      <p style="color:#555;">Votre bot a ete configure et est desormais actif. Voici les details de votre abonnement :</p>
+      <table width="100%" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:20px 0;">
+        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;">ABONNEMENT ACTIF</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;width:45%;">ID Client</td>
+            <td style="padding:12px 15px;border-bottom:1px solid #eee;"><span style="background:#1a1a2e;color:#2f74a3;padding:4px 12px;border-radius:15px;font-family:monospace;font-weight:bold;">${id}</span></td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Pack</td>
+            <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${result.pack}</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Plateforme</td>
+            <td style="padding:12px 15px;border-bottom:1px solid #eee;">${result.plateforme}</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Date de debut</td>
+            <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${result.date_debut}</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;">Valide jusqu'au</td>
+            <td style="padding:12px 15px;font-weight:bold;color:#2f74a3;">${result.date_fin}</td></tr>
+      </table>
+      <p style="color:#555;font-size:14px;">Pour tout support : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>
+    </td></tr>
+    <tr><td style="background:#1a1a2e;padding:20px;text-align:center;">
+      <p style="color:#2f74a3;margin:0;font-weight:bold;">MOHS TECHNOLOGIE</p>
+    </td></tr>
+  </table>
+</body></html>`;
+
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>",
+            to: [result.email],
+            subject: "Votre bot est pret ! - MOHS TECHNOLOGIE",
+            html
+          })
+        });
+      }
+
+      // Générer lien FedaPay pour le solde
+      let lienSolde = null;
+      const montantTotal = Number(result.montant) * nbMois;
+      const solde = Math.round(montantTotal / 2);
+      if (FEDAPAY_API_KEY && result.email) {
+        lienSolde = await genererLienPaiement(id + "-S", solde, result.nom, result.pack, result.email, "");
+      }
+
+      // Envoyer mail avec confirmation + lien solde
+      if (result.email) {
+        await envoyerMailSolde({
+          email: result.email, nom: result.nom, id,
+          pack: result.pack, montant: montantTotal, solde,
+          lienPaiement: lienSolde, sujet: "solde"
+        });
+      }
+
+      let msg = "Bot livre !\n\n";
+      msg += "ID : " + id + "\n";
+      msg += "Nom : " + result.nom + "\n";
+      msg += "Pack : " + result.pack + "\n";
+      msg += "Date debut : " + result.date_debut + "\n";
+      msg += "Date fin : " + result.date_fin + "\n";
+      msg += "Solde a payer : " + solde.toLocaleString("fr-FR") + " FCFA\n\n";
+      msg += lienSolde ? "Lien solde envoye au client :\n" + lienSolde : "Lien solde non genere";
       await send(chatId, msg);
       return;
     }
