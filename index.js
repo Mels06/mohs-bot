@@ -759,8 +759,8 @@ app.post("/paiement-confirme", async (req, res) => {
     // Format: MOHSBOT_MT-XXXXX_TYPE_TIMESTAMP
     // Extraire MT-XXXXX : 2eme segment apres split par _
     const segments = ref.split("_");
-    // segments[0] = MOHSBOT, segments[1] = MT, segments[2] = XXXXX
-    const idClient = segments[1] + "-" + segments[2]; // MT-XXXXX
+    // MOHSBOT_MT-XXXXX_TYPE_TIMESTAMP -> segments[1] = MT-XXXXX
+    const idClient = segments[1];
     console.log("Webhook idClient extrait: " + idClient);
     const result = await callSheet("update_abonnement", { id_client: idClient, ref_paiement: transaction.id, moyen: "FedaPay" });
     if (result.status === "ok") {
