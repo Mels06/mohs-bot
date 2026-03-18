@@ -497,6 +497,7 @@ app.post("/webhook", async (req, res) => {
       await send(chatId, "Livraison du bot pour " + id + " en cours...");
 
       const result = await callSheet("livrer", { id_client: id, nb_mois: nbMois });
+      console.log("livrer result: " + JSON.stringify(result));
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
 
       if (result.email) {
