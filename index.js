@@ -357,30 +357,62 @@ app.post("/webhook", async (req, res) => {
     }
 
     if (text.toLowerCase().startsWith("nouveau ")) {
-      const rawText  = text.trim().substring(8).trim();
-      const allWords = rawText.split(" ");
-      const emailWord = allWords.find(w => w.includes("@"));
-      if (!emailWord) { await send(chatId, "Email introuvable.\nFormat :\nnouveau Melissa, WEBCOOM, 0196146200 email 1 telegram"); return; }
-      const emailIndex = rawText.indexOf(emailWord);
-      const avantEmail = rawText.substring(0, emailIndex).trim();
-      const apresEmail = rawText.substring(emailIndex + emailWord.length).trim().split(" ").filter(p => p);
-      const email      = emailWord;
-      const packNum    = apresEmail[0];
-      const plateforme = apresEmail[1] || "telegram";
-      const nbMois     = parseInt(apresEmail[2]) || 1;
-      const segments   = avantEmail.split(",").map(s => s.trim()).filter(s => s);
-      let nom, entreprise, telephone;
-      if (segments.length >= 3) {
-        nom = segments[0]; entreprise = segments[1]; telephone = segments[2];
-      } else if (segments.length === 2) {
-        nom = segments[0]; entreprise = ""; telephone = segments[1];
+      const rawText = text.trim().substring(8).trim();
+      let nom = "", entreprise = "", telephone = "", email = "", packNum = "", plateforme = "telegram", nbMois = 1;
+
+      // Detecter format formulaire (avec "Nom", "email", "Pack", etc.)
+      const isFormulaire = rawText.toLowerCase().includes("nom") || rawText.toLowerCase().includes("prenom") || rawText.toLowerCase().includes("pack souhaite") || rawText.toLowerCase().includes("canal");
+
+      if (isFormulaire) {
+        // Parser format formulaire
+        const lines = rawText.split("\n").map(l => l.trim()).filter(l => l);
+        for (const line of lines) {
+          const lower = line.toLowerCase();
+          const val   = line.includes(":") ? line.split(":").slice(1).join(":").trim() : "";
+          if (!val) continue;
+          if (lower.includes("nom") || lower.includes("prenom"))             nom        = nom ? nom : val;
+          if (lower.includes("entreprise") || lower.includes("societe") || lower.includes("structure")) entreprise = val;
+          if (lower.includes("telephone") || lower.includes("tel") || lower.includes("numero") || lower.includes("num\u00e9ro"))  telephone  = val.replace(/\s/g,"");
+          if (lower.includes("email") || lower.includes("mail") || lower.includes("e-mail"))            email      = val.trim();
+          if (lower.includes("pack"))      { const m = val.match(/\d/); if (m) packNum = m[0]; }
+          if (lower.includes("canal") || lower.includes("plateforme")) {
+            if (val.toLowerCase().includes("whatsapp")) plateforme = "whatsapp";
+            else if (val.toLowerCase().includes("telegram")) plateforme = "telegram";
+          }
+        }
+        // Si nom contient "prenom" dans le label, prendre juste la valeur
+        if (nom.toLowerCase().includes("et prenom") || nom.toLowerCase().includes("prénom")) {
+          nom = nom.replace(/.*:/,"").trim();
+        }
       } else {
-        const parts = avantEmail.split(" ");
-        telephone = parts[parts.length - 1]; nom = parts.slice(0, -1).join(" "); entreprise = "";
+        // Parser format compact: nouveau Melissa, WEBCOOM, 0196146200 email 1 telegram
+        const allWords  = rawText.split(" ");
+        const emailWord = allWords.find(w => w.includes("@"));
+        if (!emailWord) { await send(chatId, "Email introuvable.\nFormat :\nnouveau Melissa, WEBCOOM, 0196146200 email 1 telegram"); return; }
+        const emailIndex = rawText.indexOf(emailWord);
+        const avantEmail = rawText.substring(0, emailIndex).trim();
+        const apresEmail = rawText.substring(emailIndex + emailWord.length).trim().split(" ").filter(p => p);
+        email      = emailWord;
+        packNum    = apresEmail[0];
+        plateforme = apresEmail[1] || "telegram";
+        nbMois     = parseInt(apresEmail[2]) || 1;
+        const segments = avantEmail.split(",").map(s => s.trim()).filter(s => s);
+        if (segments.length >= 3) {
+          nom = segments[0]; entreprise = segments[1]; telephone = segments[2];
+        } else if (segments.length === 2) {
+          nom = segments[0]; entreprise = ""; telephone = segments[1];
+        } else {
+          const parts = avantEmail.split(" ");
+          telephone = parts[parts.length - 1]; nom = parts.slice(0, -1).join(" "); entreprise = "";
+        }
       }
-      if (!nom || !telephone) { await send(chatId, "Format :\nnouveau Melissa AKPOVI, WEBCOOM SAS, 0196146200 email 1 telegram"); return; }
+
+      if (!nom)       { await send(chatId, "Nom introuvable dans le message."); return; }
+      if (!telephone) { await send(chatId, "Telephone introuvable dans le message."); return; }
+      if (!email)     { await send(chatId, "Email introuvable dans le message."); return; }
+      if (!packNum)   { await send(chatId, "Pack introuvable. Preciser Pack 1, 2, 3 ou 4."); return; }
       const packInfo = PACKS[packNum];
-      if (!packInfo) { await send(chatId, "Pack invalide. Tape 'packs'."); return; }
+      if (!packInfo)  { await send(chatId, "Pack invalide. Tape 'packs'."); return; }
 
       const idClient     = genererID();
       const montant      = plateforme.toLowerCase() === "whatsapp" ? packInfo.whatsapp : packInfo.telegram;
