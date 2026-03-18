@@ -341,9 +341,18 @@ app.post("/webhook", async (req, res) => {
       const result = await callSheet("livrer", { id_client: id, nb_mois: nbMois });
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
 
-      // Solde = 50% du montant mensuel (pas * nbMois car l'acompte = 50% du premier mois)
-      const montantMensuel = Number(result.montant);
-      const solde          = Math.round(montantMensuel / 2);
+      // Solde = meme montant que l acompte (50% du mensuel)
+      // Le montant dans Sheets = montant mensuel complet
+      const packNom = String(result.pack || "").toLowerCase();
+      const platNom = String(result.plateforme || "").toLowerCase();
+      let montantMensuel = 0;
+      if      (packNom.includes("1") || packNom.includes("essentiel"))  montantMensuel = platNom.includes("whatsapp") ? 30000 : 15000;
+      else if (packNom.includes("2") || packNom.includes("avanc"))      montantMensuel = platNom.includes("whatsapp") ? 40000 : 20000;
+      else if (packNom.includes("3") || packNom.includes("assistant"))  montantMensuel = platNom.includes("whatsapp") ? 50000 : 25000;
+      else if (packNom.includes("4") || packNom.includes("commercial")) montantMensuel = platNom.includes("whatsapp") ? 100000 : 35000;
+      else montantMensuel = 15000;
+      const solde = Math.round(montantMensuel / 2); // 50% du mensuel = meme que l acompte
+      console.log("livrer - pack:" + result.pack + " plateforme:" + result.plateforme + " mensuel:" + montantMensuel + " solde:" + solde);
 
       let lienSolde = null;
       if (FEDAPAY_API_KEY && result.email) {
