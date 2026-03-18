@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbxVt_EHCWvSgFlZErI4sWwPV0DE3v6NBW2z-VcG0_mkDHpUyuHSS2gJFQydygx-Q_E/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbyLFvh8WpjzcYYrJiez4zU4NHohgT-7cXLBRTgB_odixE22hsVboFXoYkKtspPegt9i/exec";
 const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
@@ -226,130 +226,6 @@ async function envoyerMailSolde({ email, nom, id, pack, montant, solde, lienPaie
     console.error("Resend " + sujet + ":", JSON.stringify(data)); return false;
   } catch(e) { console.error("Mail " + sujet + ":", e.message); return false; }
 }
-
-// ── MAIL LIVRAISON ───────────────────────────────────────────────────────────
-async function envoyerMailLivraison({ email, nom, id, pack, montant, solde, lienSolde, urlBot, date_debut, date_fin }) {
-  if (!RESEND_API_KEY) return false;
-
-  const lienSoldeHtml = lienSolde
-    ? '<p style="text-align:center;margin:20px 0;"><a href="' + lienSolde + '" style="background:#2f74a3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Payer le solde (' + Number(solde).toLocaleString("fr-FR") + ' FCFA)</a></p>'
-    : '';
-
-  const urlBotHtml = urlBot
-    ? '<p style="text-align:center;margin:20px 0;"><a href="' + urlBot + '" style="background:#1a1a2e;color:#2f74a3;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;border:2px solid #2f74a3;">Acceder a mon bot</a></p>'
-    : '';
-
-  const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
-  <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
-    <tr><td style="background:#1a1a2e;padding:30px;text-align:center;">
-      <h1 style="color:#2f74a3;margin:0;font-size:26px;letter-spacing:2px;">MOHS TECHNOLOGIE</h1>
-      <p style="color:#aaa;margin:5px 0 0;font-size:13px;">Solutions Digitales et Bots Intelligents</p>
-    </td></tr>
-    <tr><td style="padding:30px;">
-      <h2 style="color:#1a1a2e;">Votre bot est pret, ${nom} !</h2>
-      <p style="color:#555;line-height:1.6;">Votre bot a ete configure avec succes. Vous pouvez des maintenant l utiliser !</p>
-      <table width="100%" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:20px 0;">
-        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;">DETAILS ABONNEMENT</td></tr>
-        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;width:45%;">ID Client</td>
-            <td style="padding:12px 15px;border-bottom:1px solid #eee;"><span style="background:#1a1a2e;color:#2f74a3;padding:4px 12px;border-radius:15px;font-family:monospace;font-weight:bold;">${id}</span></td></tr>
-        <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Pack</td>
-            <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${pack}</td></tr>
-        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Debut abonnement</td>
-            <td style="padding:12px 15px;border-bottom:1px solid #eee;">${date_debut}</td></tr>
-        <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Valide jusqu'au</td>
-            <td style="padding:12px 15px;font-weight:bold;color:#2f74a3;border-bottom:1px solid #eee;">${date_fin}</td></tr>
-        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Montant mensuel</td>
-            <td style="padding:12px 15px;border-bottom:1px solid #eee;">${Number(montant).toLocaleString("fr-FR")} FCFA</td></tr>
-        <tr style="background:#e8f4fb;"><td style="padding:12px 15px;color:#2f74a3;font-weight:bold;">Solde a regler</td>
-            <td style="padding:12px 15px;color:#2f74a3;font-weight:bold;font-size:16px;">${Number(solde).toLocaleString("fr-FR")} FCFA</td></tr>
-      </table>
-      ${urlBotHtml}
-      ${lienSoldeHtml}
-      <p style="color:#555;font-size:14px;">Conservez votre ID <strong style="color:#2f74a3;">${id}</strong> pour tout support.</p>
-      <p style="color:#555;font-size:14px;">Contact : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>
-    </td></tr>
-    <tr><td style="background:#1a1a2e;padding:20px;text-align:center;">
-      <p style="color:#2f74a3;margin:0;font-weight:bold;">MOHS TECHNOLOGIE</p>
-      <p style="color:#666;margin:5px 0 0;font-size:12px;">contact@mohstechnologie.com</p>
-    </td></tr>
-  </table>
-</body></html>`;
-
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>", to: [email], subject: "Votre bot est pret ! - MOHS TECHNOLOGIE", html })
-    });
-    const data = await res.json();
-    if (data.id) { console.log("Mail livraison envoye a " + email); return true; }
-    console.error("Resend livraison:", JSON.stringify(data)); return false;
-  } catch(e) { console.error("Mail livraison:", e.message); return false; }
-}
-
-// ── MAIL LIVRAISON ───────────────────────────────────────────────────────────
-async function envoyerMailLivraison({ email, nom, id, pack, montant, solde, lienSolde, urlBot, date_debut, date_fin }) {
-  if (!RESEND_API_KEY) return false;
-
-  const lienBotHtml = urlBot
-    ? '<p style="text-align:center;margin:20px 0;"><a href="' + urlBot + '" style="background:#1a1a2e;color:#2f74a3;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;border:2px solid #2f74a3;">Acceder a mon bot</a></p>'
-    : '';
-
-  const lienSoldeHtml = lienSolde
-    ? '<p style="text-align:center;margin:20px 0;"><a href="' + lienSolde + '" style="background:#2f74a3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Payer le solde (' + Number(solde).toLocaleString("fr-FR") + ' FCFA)</a></p>'
-    : '';
-
-  const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
-  <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
-    <tr><td style="background:#1a1a2e;padding:30px;text-align:center;">
-      <h1 style="color:#2f74a3;margin:0;">MOHS TECHNOLOGIE</h1>
-      <p style="color:#aaa;margin:5px 0 0;font-size:13px;">Solutions Digitales et Bots Intelligents</p>
-    </td></tr>
-    <tr><td style="padding:30px;">
-      <h2 style="color:#1a1a2e;">Votre bot est pret, ${nom} ! 🎉</h2>
-      <p style="color:#555;line-height:1.6;">Votre bot a ete configure avec succes. Vous pouvez maintenant l'utiliser !</p>
-      <table width="100%" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:20px 0;">
-        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;">DETAILS ABONNEMENT</td></tr>
-        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;width:45%;">ID Client</td>
-            <td style="padding:12px 15px;border-bottom:1px solid #eee;"><span style="background:#1a1a2e;color:#2f74a3;padding:4px 12px;border-radius:15px;font-family:monospace;font-weight:bold;">${id}</span></td></tr>
-        <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Pack</td>
-            <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${pack}</td></tr>
-        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Date de debut</td>
-            <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${date_debut}</td></tr>
-        <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Valide jusqu'au</td>
-            <td style="padding:12px 15px;font-weight:bold;color:#2f74a3;border-bottom:1px solid #eee;">${date_fin}</td></tr>
-        <tr><td style="padding:12px 15px;color:#888;">Solde a payer</td>
-            <td style="padding:12px 15px;color:#2f74a3;font-weight:bold;font-size:18px;">${Number(solde).toLocaleString("fr-FR")} FCFA</td></tr>
-      </table>
-      ${lienBotHtml}
-      ${lienSoldeHtml}
-      <p style="color:#555;font-size:14px;">Conservez votre ID <strong style="color:#2f74a3;">${id}</strong> pour tout support.</p>
-      <p style="color:#555;font-size:14px;">Contact : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>
-    </td></tr>
-    <tr><td style="background:#1a1a2e;padding:20px;text-align:center;">
-      <p style="color:#2f74a3;margin:0;font-weight:bold;">MOHS TECHNOLOGIE</p>
-      <p style="color:#666;margin:5px 0 0;font-size:12px;">contact@mohstechnologie.com</p>
-    </td></tr>
-  </table>
-</body></html>`;
-
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>",
-        to: [email],
-        subject: "Votre bot est pret ! - MOHS TECHNOLOGIE",
-        html
-      })
-    });
-    const data = await res.json();
-    if (data.id) { console.log("Mail livraison envoye a " + email); return true; }
-    console.error("Resend livraison:", JSON.stringify(data)); return false;
-  } catch(e) { console.error("Mail livraison:", e.message); return false; }
-}
-
 
 // ── MAIL LIVRAISON ────────────────────────────────────────────────────────────
 async function envoyerMailLivraison({ email, nom, id, pack, montant, solde, lienSolde, urlBot, urlSheet, date_debut, date_fin }) {
