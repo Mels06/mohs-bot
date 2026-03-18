@@ -117,7 +117,7 @@ async function genererLienPaiement(reference, montant, nom, pack, email) {
       description: "MOHS BOT - " + pack + " - " + nom,
       amount: montant,
       currency: { iso: "XOF" },
-      merchant_reference: "MOHSBOT_" + reference,
+      merchant_reference: "MOHSBOT_" + String(reference).replace(/-/g, "_"),
       customer: {
         firstname: nom,
         email: email && email.includes("@") ? email.trim() : "client@mohstechnologie.com"
@@ -747,10 +747,11 @@ app.post("/paiement-confirme", async (req, res) => {
     console.log("Webhook FedaPay ref: " + ref);
     if (!ref.startsWith("MOHSBOT_")) { console.log("Ref ignoree: " + ref); return; }
 
-    const segments  = ref.split("_");
-    const rawId     = segments[1] || "";
-    const idClient  = rawId.replace(/-S$/, "").replace(/-R$/, "");
-    const typePaie  = rawId.endsWith("-S") ? "SOLDE" : rawId.endsWith("-R") ? "RENOUVELLEMENT" : "ACOMPTE";
+    // ref format: MOHSBOT_MT_XXXXX_S ou MOHSBOT_MT_XXXXX_R ou MOHSBOT_MT_XXXXX
+    const refClean  = ref.replace("MOHSBOT_", "");
+    const typePaie  = refClean.endsWith("_S") ? "SOLDE" : refClean.endsWith("_R") ? "RENOUVELLEMENT" : "ACOMPTE";
+    const rawId     = typePaie !== "ACOMPTE" ? refClean.slice(0, -2) : refClean;
+    const idClient  = rawId.replace(/_/g, "-"); // MT_XXXXX -> MT-XXXXX
     console.log("Webhook idClient: " + idClient + " type: " + typePaie);
 
     const result = await callSheet("update_abonnement", { id_client: idClient, ref_paiement: transaction.id, moyen: "FedaPay" });
