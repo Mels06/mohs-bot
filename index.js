@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbydILSyjcQdR2YVpaEzWOOB2w8gOPRx2QUnJgbaZ9IxA1K1veaObgHD6n6y5-7-yIw4/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbxw0yPh90NKgruot9-pfTvcnlss7dXRPeh7AfuWOhA8yBtuPQGtDoMli03cwu68q-rV/exec";
 const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
@@ -575,6 +575,16 @@ app.post("/webhook", async (req, res) => {
       if (urlBot) msg += "URL bot : " + urlBot + "\n";
       if (result.email) msg += "Mail envoye a " + result.email;
       await send(chatId, msg);
+      return;
+    }
+
+    // TESTER
+    if (text.toLowerCase().startsWith("tester ")) {
+      const id = text.split(" ")[1]?.trim();
+      if (!id) { await send(chatId, "Format : tester [ID]\n\nEx: tester MT-X7K2P"); return; }
+      const result = await callSheet("tester", { id_client: id });
+      if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
+      await send(chatId, "Mode test active pour 24h !\n\nID : " + id + "\nNom : " + result.nom + "\nStatut : ACTIF (test)\nExpire : " + result.date_fin + "\n\nLe bot client va repondre normalement.\nTape 'livrer " + id + "' quand tu es pret a livrer officiellement.");
       return;
     }
 
