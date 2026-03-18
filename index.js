@@ -54,27 +54,27 @@ function repondreConversation(intent, prenom) {
   const n = prenom ? " " + prenom : "";
   switch(intent) {
     case "salutations": return "Bonjour" + n + " ! Je suis ton assistant MOHS TECHNOLOGIE.\n\nTape 'aide' pour voir toutes les commandes.";
-    case "quiSommes":   return "MOHS TECHNOLOGIE est specialisee dans la configuration de bots intelligents.\n\nNos bots gerent les ventes, le service client, la gestion commerciale.\n\nTape 'packs' pour voir nos offres !";
-    case "services":    return "Nous proposons 4 packs de bots :\nPack 1 - Essentiel\nPack 2 - Avancee\nPack 3 - Assistant\nPack 4 - Commercial\n\nDisponibles sur Telegram et WhatsApp.\nTape 'packs' pour les tarifs !";
+    case "quiSommes":   return "MOHS TECHNOLOGIE est specialisee dans la configuration de bots intelligents.\n\nTape 'packs' pour voir nos offres !";
+    case "services":    return "Nous proposons 4 packs de bots.\nTape 'packs' pour les tarifs !";
     case "contact":     return "Contact : contact@mohstechnologie.com";
     case "merci":       return "Avec plaisir" + n + " !";
     case "aide":        return "Commandes disponibles :\n\n" +
-      "nouveau [nom], [entreprise optionnel], [tel] [email] [pack] [plateforme]\n" +
+      "nouveau [nom], [entreprise], [tel] [email] [pack] [plateforme]\n" +
       "client [ID] - Fiche client\n" +
       "clients / actifs / expires / alerte\n" +
       "liste pack1 / liste telegram\n" +
+      "tester [ID] - Activer pour test\n" +
+      "solde [ID] [url bot] [url sheets] - Envoyer lien paiement solde\n" +
+      "livrer [ID] - Livraison manuelle\n" +
       "renouveler [ID] / renouveler [ID] 3\n" +
       "suspendre [ID] / reactiver [ID]\n" +
-      "livrer [ID] - Livrer le bot et demarrer l'abonnement\n" +
-      "solde [ID] - Envoyer lien paiement solde\n" +
-      "nombot [ID] [nom] - Definir nom du bot\n" +
-      "description [ID] [texte] - Ajouter description client\n" +
+      "nombot [ID] [nom]\n" +
+      "description [ID] [texte]\n" +
       "bots / bots afaire / bots encours / bots livre\n" +
       "bot encours [ID] / bot fait [ID]\n" +
-      "stats - Tableau de bord\n" +
-      "ca mars / ca 2025 / ca 01/01/2025 31/03/2025\n" +
+      "stats / ca mars / ca 2025\n" +
       "commandes / commandes aujourd'hui\n" +
-      "packs - Voir les tarifs";
+      "packs";
     default: return null;
   }
 }
@@ -96,6 +96,16 @@ async function send(chatId, text) {
       chat_id: chatId, text: text
     });
   } catch(e) { console.error("Telegram:", e.response?.data?.description || e.message); }
+}
+
+function getPrixFromPack(pack, plateforme) {
+  const p  = String(pack||"").toLowerCase();
+  const pl = String(plateforme||"telegram").toLowerCase();
+  if (p.includes("1") || p.includes("essentiel"))  return pl.includes("whatsapp") ? 30000 : 15000;
+  if (p.includes("2") || p.includes("avanc"))      return pl.includes("whatsapp") ? 40000 : 20000;
+  if (p.includes("3") || p.includes("assistant"))  return pl.includes("whatsapp") ? 50000 : 25000;
+  if (p.includes("4") || p.includes("commercial")) return pl.includes("whatsapp") ? 100000 : 35000;
+  return 15000;
 }
 
 // ── FEDAPAY ───────────────────────────────────────────────────────────────────
@@ -125,7 +135,7 @@ async function genererLienPaiement(reference, montant, nom, pack, email) {
 }
 
 // ── MAIL BIENVENUE ────────────────────────────────────────────────────────────
-async function envoyerMail({ email, nom, id, pack, montant, plateforme, date_fin, lienPaiement, acompte, solde }) {
+async function envoyerMailBienvenue({ email, nom, id, pack, montant, plateforme, lienPaiement, acompte, solde }) {
   if (!RESEND_API_KEY) return false;
   const lienHtml = lienPaiement
     ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Payer mon acompte (' + Number(acompte).toLocaleString("fr-FR") + ' FCFA)</a></p>'
@@ -178,36 +188,32 @@ async function envoyerMail({ email, nom, id, pack, montant, plateforme, date_fin
   } catch(e) { console.error("Mail:", e.message); return false; }
 }
 
-// ── MAIL SOLDE / RENOUVELLEMENT / LIVRAISON ───────────────────────────────────
-async function envoyerMailSolde({ email, nom, id, pack, montant, solde, lienPaiement, sujet, urlBot }) {
+// ── MAIL SOLDE ────────────────────────────────────────────────────────────────
+async function envoyerMailSolde({ email, nom, id, pack, montant, solde, lienPaiement }) {
   if (!RESEND_API_KEY) return false;
   const lienHtml = lienPaiement
-    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Payer ' + Number(solde).toLocaleString("fr-FR") + ' FCFA</a></p>'
+    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Payer le solde (' + Number(solde).toLocaleString("fr-FR") + ' FCFA)</a></p>'
     : '<p style="color:#888;font-size:13px;text-align:center;">Lien de paiement non disponible.</p>';
-  const urlBotHtml = (urlBot && sujet === "livraison")
-    ? '<p style="text-align:center;margin:20px 0;"><a href="' + urlBot + '" style="background:#1a1a2e;color:#2f74a3;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Acceder a mon bot</a></p>'
-    : "";
-  const titre = sujet === "livraison" ? "Votre bot est pret !" : sujet === "renouvellement" ? "Renouvellement de votre abonnement" : "Solde de votre abonnement";
   const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
   <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;">
     <tr><td style="background:#1a1a2e;padding:30px;text-align:center;">
       <h1 style="color:#2f74a3;margin:0;">MOHS TECHNOLOGIE</h1>
     </td></tr>
     <tr><td style="padding:30px;">
-      <h2 style="color:#1a1a2e;">${titre}, ${nom} !</h2>
+      <h2 style="color:#1a1a2e;">Reglement du solde, ${nom} !</h2>
+      <p style="color:#555;">Votre bot est en cours de configuration. Voici le lien pour regler le solde :</p>
       <table width="100%" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:20px 0;">
-        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;">DETAILS</td></tr>
+        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;">SOLDE A REGLER</td></tr>
         <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;width:45%;">ID Client</td>
             <td style="padding:12px 15px;border-bottom:1px solid #eee;"><span style="background:#1a1a2e;color:#2f74a3;padding:4px 12px;border-radius:15px;font-family:monospace;font-weight:bold;">${id}</span></td></tr>
         <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Pack</td>
             <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${pack}</td></tr>
-        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Montant total</td>
+        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Montant mensuel</td>
             <td style="padding:12px 15px;border-bottom:1px solid #eee;">${Number(montant).toLocaleString("fr-FR")} FCFA</td></tr>
-        <tr style="background:#e8f4fb;"><td style="padding:12px 15px;color:#2f74a3;font-weight:bold;">Montant a payer</td>
+        <tr style="background:#e8f4fb;"><td style="padding:12px 15px;color:#2f74a3;font-weight:bold;">Solde a payer</td>
             <td style="padding:12px 15px;color:#2f74a3;font-weight:bold;font-size:18px;">${Number(solde).toLocaleString("fr-FR")} FCFA</td></tr>
       </table>
       ${lienHtml}
-      ${urlBotHtml}
       <p style="color:#555;font-size:14px;">Contact : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>
     </td></tr>
     <tr><td style="background:#1a1a2e;padding:20px;text-align:center;">
@@ -219,37 +225,32 @@ async function envoyerMailSolde({ email, nom, id, pack, montant, solde, lienPaie
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>", to: [email], subject: titre + " - MOHS TECHNOLOGIE", html })
+      body: JSON.stringify({ from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>", to: [email], subject: "Reglement du solde - MOHS TECHNOLOGIE - " + pack, html })
     });
     const data = await res.json();
-    if (data.id) { console.log("Mail " + sujet + " envoye a " + email); return true; }
-    console.error("Resend " + sujet + ":", JSON.stringify(data)); return false;
-  } catch(e) { console.error("Mail " + sujet + ":", e.message); return false; }
+    if (data.id) { console.log("Mail solde envoye a " + email); return true; }
+    console.error("Resend solde:", JSON.stringify(data)); return false;
+  } catch(e) { console.error("Mail solde:", e.message); return false; }
 }
 
 // ── MAIL LIVRAISON ────────────────────────────────────────────────────────────
-async function envoyerMailLivraison({ email, nom, id, pack, montant, solde, lienSolde, urlBot, urlSheet, date_debut, date_fin }) {
+async function envoyerMailLivraison({ email, nom, id, pack, montant, urlBot, urlSheet, date_debut, date_fin }) {
   if (!RESEND_API_KEY) return false;
-
   const btnBot = urlBot
     ? '<p style="text-align:center;margin:10px 0;"><a href="' + urlBot + '" style="background:#1a1a2e;color:#2f74a3;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;border:2px solid #2f74a3;">Acceder a mon bot</a></p>'
     : '';
-
   const btnSheet = urlSheet
     ? '<p style="text-align:center;margin:10px 0;"><a href="' + urlSheet + '" style="background:#f0f7ff;color:#2f74a3;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;border:2px solid #2f74a3;">Mon tableau de bord</a></p>'
     : '';
-
-  const btnSolde = '';
-
   const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
-  <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+  <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;">
     <tr><td style="background:#1a1a2e;padding:30px;text-align:center;">
-      <h1 style="color:#2f74a3;margin:0;font-size:26px;letter-spacing:2px;">MOHS TECHNOLOGIE</h1>
+      <h1 style="color:#2f74a3;margin:0;">MOHS TECHNOLOGIE</h1>
       <p style="color:#aaa;margin:5px 0 0;font-size:13px;">Solutions Digitales et Bots Intelligents</p>
     </td></tr>
     <tr><td style="padding:30px;">
       <h2 style="color:#1a1a2e;">Votre bot est pret, ${nom} !</h2>
-      <p style="color:#555;line-height:1.6;">Bonne nouvelle ! Votre bot a ete configure avec succes. Voici les details de votre abonnement :</p>
+      <p style="color:#555;">Votre bot a ete configure avec succes. Voici les details de votre abonnement :</p>
       <table width="100%" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:20px 0;">
         <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;">ABONNEMENT ACTIF</td></tr>
         <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;width:45%;">ID Client</td>
@@ -260,14 +261,12 @@ async function envoyerMailLivraison({ email, nom, id, pack, montant, solde, lien
             <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${Number(montant).toLocaleString("fr-FR")} FCFA</td></tr>
         <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Date de debut</td>
             <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${date_debut}</td></tr>
-        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Valide jusqu'au</td>
-            <td style="padding:12px 15px;font-weight:bold;color:#2f74a3;border-bottom:1px solid #eee;">${date_fin}</td></tr>
-        <tr style="background:#e8f4fb;"><td style="padding:12px 15px;color:#2f74a3;font-weight:bold;">Solde restant</td>
-            <td style="padding:12px 15px;color:#2f74a3;font-weight:bold;font-size:16px;">${Number(solde).toLocaleString("fr-FR")} FCFA</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;">Valide jusqu'au</td>
+            <td style="padding:12px 15px;font-weight:bold;color:#2f74a3;">${date_fin}</td></tr>
       </table>
       ${btnBot}
       ${btnSheet}
-      <p style="color:#555;font-size:14px;line-height:1.6;">Conservez votre ID <strong style="color:#2f74a3;">${id}</strong> pour tout support ou renouvellement.</p>
+      <p style="color:#555;font-size:14px;margin-top:20px;">Conservez votre ID <strong style="color:#2f74a3;">${id}</strong> pour tout support.</p>
       <p style="color:#555;font-size:14px;">Contact : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>
     </td></tr>
     <tr><td style="background:#1a1a2e;padding:20px;text-align:center;">
@@ -276,22 +275,59 @@ async function envoyerMailLivraison({ email, nom, id, pack, montant, solde, lien
     </td></tr>
   </table>
 </body></html>`;
-
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>",
-        to: [email],
-        subject: "Votre bot est pret ! - MOHS TECHNOLOGIE",
-        html
-      })
+      body: JSON.stringify({ from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>", to: [email], subject: "Votre bot est pret ! - MOHS TECHNOLOGIE", html })
     });
     const data = await res.json();
     if (data.id) { console.log("Mail livraison envoye a " + email); return true; }
     console.error("Resend livraison:", JSON.stringify(data)); return false;
   } catch(e) { console.error("Mail livraison:", e.message); return false; }
+}
+
+// ── MAIL RENOUVELLEMENT ───────────────────────────────────────────────────────
+async function envoyerMailRenouvellement({ email, nom, id, pack, montant, lienPaiement }) {
+  if (!RESEND_API_KEY) return false;
+  const lienHtml = lienPaiement
+    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Renouveler mon abonnement (' + Number(montant).toLocaleString("fr-FR") + ' FCFA)</a></p>'
+    : '';
+  const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
+  <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;">
+    <tr><td style="background:#1a1a2e;padding:30px;text-align:center;">
+      <h1 style="color:#2f74a3;margin:0;">MOHS TECHNOLOGIE</h1>
+    </td></tr>
+    <tr><td style="padding:30px;">
+      <h2 style="color:#1a1a2e;">Renouvellement, ${nom} !</h2>
+      <p style="color:#555;">Voici le lien pour renouveler votre abonnement :</p>
+      <table width="100%" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:20px 0;">
+        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;">RENOUVELLEMENT</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;width:45%;">ID Client</td>
+            <td style="padding:12px 15px;border-bottom:1px solid #eee;"><span style="background:#1a1a2e;color:#2f74a3;padding:4px 12px;border-radius:15px;font-family:monospace;font-weight:bold;">${id}</span></td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Pack</td>
+            <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${pack}</td></tr>
+        <tr style="background:#e8f4fb;"><td style="padding:12px 15px;color:#2f74a3;font-weight:bold;">Montant</td>
+            <td style="padding:12px 15px;color:#2f74a3;font-weight:bold;font-size:18px;">${Number(montant).toLocaleString("fr-FR")} FCFA</td></tr>
+      </table>
+      ${lienHtml}
+      <p style="color:#555;font-size:14px;">Contact : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>
+    </td></tr>
+    <tr><td style="background:#1a1a2e;padding:20px;text-align:center;">
+      <p style="color:#2f74a3;margin:0;font-weight:bold;">MOHS TECHNOLOGIE</p>
+    </td></tr>
+  </table>
+</body></html>`;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>", to: [email], subject: "Renouvellement de votre abonnement - MOHS TECHNOLOGIE", html })
+    });
+    const data = await res.json();
+    if (data.id) { console.log("Mail renouvellement envoye a " + email); return true; }
+    return false;
+  } catch(e) { console.error("Mail renouvellement:", e.message); return false; }
 }
 
 app.get("/", (req, res) => res.send("MOHS BOT Admin operationnel"));
@@ -329,7 +365,7 @@ app.post("/webhook", async (req, res) => {
 
     // NOUVEAU CLIENT
     if (text.toLowerCase().startsWith("nouveau ")) {
-      const rawText = text.trim().substring(8).trim();
+      const rawText  = text.trim().substring(8).trim();
       const allWords = rawText.split(" ");
       const emailWord = allWords.find(w => w.includes("@"));
       if (!emailWord) { await send(chatId, "Email introuvable.\nFormat :\nnouveau Melissa, WEBCOOM, 0196146200 email 1 telegram"); return; }
@@ -350,10 +386,9 @@ app.post("/webhook", async (req, res) => {
         const parts = avantEmail.split(" ");
         telephone = parts[parts.length - 1]; nom = parts.slice(0, -1).join(" "); entreprise = "";
       }
-      if (!nom || !telephone) { await send(chatId, "Format :\nnouveau Melissa AKPOVI, WEBCOOM SAS, 0196146200 email 1 telegram\nnouveau Melissa AKPOVI, 0196146200 email 1 telegram"); return; }
-      if (!packNum) { await send(chatId, "Pack manquant. Choisir 1, 2, 3 ou 4."); return; }
+      if (!nom || !telephone) { await send(chatId, "Format :\nnouveau Melissa AKPOVI, WEBCOOM SAS, 0196146200 email 1 telegram"); return; }
       const packInfo = PACKS[packNum];
-      if (!packInfo) { await send(chatId, "Pack invalide. Tape 'packs' pour voir les details."); return; }
+      if (!packInfo) { await send(chatId, "Pack invalide. Tape 'packs'."); return; }
 
       const idClient     = genererID();
       const montant      = plateforme.toLowerCase() === "whatsapp" ? packInfo.whatsapp : packInfo.telegram;
@@ -377,10 +412,10 @@ app.post("/webhook", async (req, res) => {
         lienPaiement = await genererLienPaiement(idClient, acompte, nom, packInfo.nom, email);
       }
 
-      const mailEnvoye = await envoyerMail({
+      const mailEnvoye = await envoyerMailBienvenue({
         email, nom, id: idClient, pack: packInfo.nom, montant,
         plateforme: plateforme.charAt(0).toUpperCase() + plateforme.slice(1),
-        date_fin: result.date_fin, lienPaiement, acompte, solde
+        lienPaiement, acompte, solde
       });
 
       let msg = "Client enregistre !\n\n";
@@ -391,54 +426,85 @@ app.post("/webhook", async (req, res) => {
       msg += "Email : " + email + "\n";
       msg += "Pack : " + packInfo.nom + "\n";
       msg += "Plateforme : " + plateforme + "\n";
-      msg += "Duree : " + nbMois + " mois\n";
-      msg += "Montant total : " + montantTotal.toLocaleString("fr-FR") + " FCFA\n";
       msg += "Acompte (50%) : " + acompte.toLocaleString("fr-FR") + " FCFA\n";
       msg += "Solde restant : " + solde.toLocaleString("fr-FR") + " FCFA\n\n";
-      msg += lienPaiement ? "Lien FedaPay :\n" + lienPaiement + "\n\n" : "Lien FedaPay non genere\n";
-      msg += mailEnvoye ? "Mail envoye a " + email + " OK" : "Mail non envoye";
+      msg += lienPaiement ? "Lien acompte :\n" + lienPaiement + "\n\n" : "Lien FedaPay non genere\n";
+      msg += mailEnvoye ? "Mail envoye a " + email : "Mail non envoye";
       await send(chatId, msg);
       return;
     }
 
-    // LIVRER
+    // TESTER
+    if (text.toLowerCase().startsWith("tester ")) {
+      const id = text.split(" ")[1]?.trim();
+      if (!id) { await send(chatId, "Format : tester [ID]"); return; }
+      const result = await callSheet("tester", { id_client: id });
+      if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
+      await send(chatId, "Mode test active !\n\nID : " + id + "\nNom : " + result.nom + "\nStatut : ACTIF (test)\nExpire : " + result.date_fin + "\n\nTape 'solde " + id + "' quand pret a livrer.");
+      return;
+    }
+
+    // SOLDE - envoie lien paiement + sauvegarde urls
+    if (["solde","reste","restant","complement"].some(m => text.toLowerCase().startsWith(m + " "))) {
+      const parts    = text.split(" ");
+      const id       = parts[1]?.trim();
+      const urlBot   = parts.find((p, i) => i > 1 && p.startsWith("https://t.me")) || null;
+      const urlSheet = parts.find((p, i) => i > 1 && p.includes("docs.google.com")) || null;
+      if (!id) { await send(chatId, "Format : solde [ID] [url bot] [url sheets]\n\nEx: solde MT-X7K2P https://t.me/MonBot https://docs.google.com/..."); return; }
+
+      await send(chatId, "Generation du lien de solde pour " + id + "...");
+
+      const client = await callSheet("get_client", { id });
+      if (client.status !== "ok") { await send(chatId, "Client introuvable : " + id); return; }
+
+      const montant = getPrixFromPack(client.pack, client.plateforme);
+      const solde   = Math.round(montant / 2);
+
+      // Sauvegarder URLs dans BOTS_A_IMPLEMENTER
+      if (urlBot || urlSheet) {
+        await callSheet("save_urlbot", { id_client: id, url_bot: urlBot || "", url_sheet: urlSheet || "" });
+      }
+
+      let lienPaiement = null;
+      if (FEDAPAY_API_KEY) {
+        lienPaiement = await genererLienPaiement(id + "-S", solde, client.nom, client.pack, client.email);
+      }
+
+      const mailEnvoye = client.email ? await envoyerMailSolde({
+        email: client.email, nom: client.nom, id,
+        pack: client.pack, montant, solde, lienPaiement
+      }) : false;
+
+      let msg = "Lien solde genere !\n\n";
+      msg += "ID : " + id + "\n";
+      msg += "Nom : " + client.nom + "\n";
+      msg += "Solde : " + solde.toLocaleString("fr-FR") + " FCFA\n\n";
+      msg += lienPaiement ? "Lien FedaPay :\n" + lienPaiement + "\n\n" : "Lien non genere\n\n";
+      msg += mailEnvoye ? "Mail envoye a " + client.email : "Mail non envoye";
+      if (urlBot) msg += "\nURL bot sauvegardee";
+      if (urlSheet) msg += "\nURL Sheets sauvegardee";
+      await send(chatId, msg);
+      return;
+    }
+
+    // LIVRER - livraison manuelle sans paiement
     if (text.toLowerCase().startsWith("livrer ")) {
-      const parts   = text.split(" ");
-      const id      = parts[1]?.trim();
-      // Detecter si parts[2] est un nb de mois ou une URL
-      const isUrl   = parts[2] && parts[2].startsWith("http");
-      const nbMois  = (!isUrl && parseInt(parts[2])) || 1;
-      const urlBot  = isUrl ? parts[2] : (parts[3] || "");
-      if (!id) { await send(chatId, "Format : livrer [ID] [url_bot optionnel]\n\nEx: livrer MT-X7K2P https://t.me/MonBot"); return; }
+      const parts  = text.split(" ");
+      const id     = parts[1]?.trim();
+      const nbMois = parseInt(parts[2]) || 1;
+      if (!id) { await send(chatId, "Format : livrer [ID]\n\nEx: livrer MT-X7K2P"); return; }
 
       await send(chatId, "Livraison du bot pour " + id + " en cours...");
 
       const result = await callSheet("livrer", { id_client: id, nb_mois: nbMois });
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
 
-      // Solde = meme montant que l acompte (50% du mensuel)
-      // Le montant dans Sheets = montant mensuel complet
-      const packNom = String(result.pack || "").toLowerCase();
-      const platNom = String(result.plateforme || "").toLowerCase();
-      let montantMensuel = 0;
-      if      (packNom.includes("1") || packNom.includes("essentiel"))  montantMensuel = platNom.includes("whatsapp") ? 30000 : 15000;
-      else if (packNom.includes("2") || packNom.includes("avanc"))      montantMensuel = platNom.includes("whatsapp") ? 40000 : 20000;
-      else if (packNom.includes("3") || packNom.includes("assistant"))  montantMensuel = platNom.includes("whatsapp") ? 50000 : 25000;
-      else if (packNom.includes("4") || packNom.includes("commercial")) montantMensuel = platNom.includes("whatsapp") ? 100000 : 35000;
-      else montantMensuel = 15000;
-      const solde = Math.round(montantMensuel / 2); // 50% du mensuel = meme que l acompte
-      console.log("livrer - pack:" + result.pack + " plateforme:" + result.plateforme + " mensuel:" + montantMensuel + " solde:" + solde);
-
-      let lienSolde = null;
-      if (FEDAPAY_API_KEY && result.email) {
-        lienSolde = await genererLienPaiement(id + "-S", solde, result.nom, result.pack, result.email);
-      }
-
       if (result.email) {
         await envoyerMailLivraison({
           email: result.email, nom: result.nom, id,
-          pack: result.pack, montant: montantMensuel, solde,
-          lienSolde, urlBot: result.url_bot || "",
+          pack: result.pack, montant: getPrixFromPack(result.pack, result.plateforme),
+          urlBot: result.url_bot || null,
+          urlSheet: result.url_sheet || null,
           date_debut: result.date_debut, date_fin: result.date_fin
         });
       }
@@ -448,22 +514,9 @@ app.post("/webhook", async (req, res) => {
       msg += "Nom : " + result.nom + "\n";
       msg += "Pack : " + result.pack + "\n";
       msg += "Date debut : " + result.date_debut + "\n";
-      msg += "Date fin : " + result.date_fin + "\n";
-      msg += "Solde a payer : " + solde.toLocaleString("fr-FR") + " FCFA\n\n";
-      msg += lienSolde ? "Lien solde :\n" + lienSolde + "\n" : "Lien solde non genere\n";
-      if (urlBot) msg += "URL bot : " + urlBot + "\n";
-      if (result.email) msg += "Mail envoye a " + result.email;
+      msg += "Date fin : " + result.date_fin + "\n\n";
+      msg += result.email ? "Mail de livraison envoye a " + result.email : "Pas d email client";
       await send(chatId, msg);
-      return;
-    }
-
-    // TESTER
-    if (text.toLowerCase().startsWith("tester ")) {
-      const id = text.split(" ")[1]?.trim();
-      if (!id) { await send(chatId, "Format : tester [ID]\n\nEx: tester MT-X7K2P"); return; }
-      const result = await callSheet("tester", { id_client: id });
-      if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
-      await send(chatId, "Mode test active pour 24h !\n\nID : " + id + "\nNom : " + result.nom + "\nStatut : ACTIF (test)\nExpire : " + result.date_fin + "\n\nLe bot client va repondre normalement.\nTape 'livrer " + id + "' quand tu es pret a livrer officiellement.");
       return;
     }
 
@@ -485,7 +538,7 @@ app.post("/webhook", async (req, res) => {
       msg += "Debut : " + c.date_debut + "\n";
       msg += "Fin : " + c.date_fin + "\n";
       msg += "Jours restants : " + c.jours_restants + "\n\n";
-      msg += "Actions :\nrenouveler " + c.id + "\nlivrer " + c.id + "\nsuspendre " + c.id + "\nreactiver " + c.id;
+      msg += "Actions :\ntester " + c.id + "\nsolde " + c.id + "\nlivrer " + c.id + "\nrenouveler " + c.id + "\nsuspendre " + c.id;
       await send(chatId, msg);
       return;
     }
@@ -522,18 +575,18 @@ app.post("/webhook", async (req, res) => {
     }
 
     // RENOUVELER
-    if (["renouveler","renouvellement","reabonner","reabonnement","prolonger","prolongation"].some(m => text.toLowerCase().startsWith(m + " "))) {
+    if (["renouveler","renouvellement","reabonner","reabonnement","prolonger"].some(m => text.toLowerCase().startsWith(m + " "))) {
       const parts  = text.split(" ");
       const id     = parts[1]?.trim();
       const nbMois = parseInt(parts[2]) || 1;
-      if (!id) { await send(chatId, "Format : renouveler [ID] [nb mois]\n\nEx: renouveler MT-X7K2P\nEx: renouveler MT-X7K2P 3"); return; }
+      if (!id) { await send(chatId, "Format : renouveler [ID] [nb mois]"); return; }
 
       await send(chatId, "Preparation du renouvellement pour " + id + "...");
 
       const client = await callSheet("get_client", { id });
       if (client.status !== "ok") { await send(chatId, "Client introuvable : " + id); return; }
 
-      const montantTotal = Number(client.montant) * nbMois;
+      const montantTotal = getPrixFromPack(client.pack, client.plateforme) * nbMois;
 
       let lienPaiement = null;
       if (FEDAPAY_API_KEY) {
@@ -546,10 +599,9 @@ app.post("/webhook", async (req, res) => {
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
 
       if (client.email) {
-        await envoyerMailSolde({
+        await envoyerMailRenouvellement({
           email: client.email, nom: client.nom, id,
-          pack: client.pack, montant: montantTotal, solde: montantTotal,
-          lienPaiement, sujet: "renouvellement"
+          pack: client.pack, montant: montantTotal, lienPaiement
         });
       }
 
@@ -583,81 +635,15 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // SOLDE
-    if (["solde","reste","restant","complement"].some(m => text.toLowerCase().startsWith(m + " "))) {
-      const parts    = text.split(" ");
-      const id       = parts[1]?.trim();
-      const urlBot   = parts.find((p, i) => i > 1 && p.startsWith("https://t.me")) || null;
-      const urlSheet = parts.find((p, i) => i > 1 && p.includes("docs.google.com")) || null;
-      if (!id) { await send(chatId, "Format : solde [ID] [url bot] [url sheets]\n\nEx: solde MT-X7K2P https://t.me/MonBot https://docs.google.com/..."); return; }
-
-      await send(chatId, "Generation du lien de solde pour " + id + "...");
-
-      const client = await callSheet("get_client", { id });
-      if (client.status !== "ok") { await send(chatId, "Client introuvable : " + id); return; }
-
-      const packNom = String(client.pack || "").toLowerCase();
-      const platNom = String(client.plateforme || "").toLowerCase();
-      let montantMensuel = 0;
-      if      (packNom.includes("1") || packNom.includes("essentiel"))  montantMensuel = platNom.includes("whatsapp") ? 30000 : 15000;
-      else if (packNom.includes("2") || packNom.includes("avanc"))      montantMensuel = platNom.includes("whatsapp") ? 40000 : 20000;
-      else if (packNom.includes("3") || packNom.includes("assistant"))  montantMensuel = platNom.includes("whatsapp") ? 50000 : 25000;
-      else if (packNom.includes("4") || packNom.includes("commercial")) montantMensuel = platNom.includes("whatsapp") ? 100000 : 35000;
-      else montantMensuel = Number(client.montant) || 15000;
-      const solde = Math.round(montantMensuel / 2);
-
-      // Sauvegarder l URL du bot dans le Apps Script pour la livraison automatique
-      if (urlBot || urlSheet) {
-        await callSheet("save_urlbot", { id_client: id, url_bot: urlBot || "", url_sheet: urlSheet || "" });
-      }
-
-      let lienPaiement = null;
-      if (FEDAPAY_API_KEY) {
-        lienPaiement = await genererLienPaiement(id + "-S", solde, client.nom, client.pack, client.email);
-      }
-
-      console.log("SOLDE lienPaiement = " + lienPaiement);
-
-      const mailEnvoye = client.email ? await envoyerMailSolde({
-        email: client.email, nom: client.nom, id,
-        pack: client.pack, montant: montantMensuel, solde,
-        lienPaiement, sujet: "solde"
-      }) : false;
-
-      let msg = "Solde genere !\n\n";
-      msg += "ID : " + id + "\n";
-      msg += "Nom : " + client.nom + "\n";
-      msg += "Pack : " + client.pack + "\n";
-      msg += "Solde (50%) : " + solde.toLocaleString("fr-FR") + " FCFA\n\n";
-      msg += lienPaiement ? "Lien FedaPay :\n" + lienPaiement + "\n\n" : "Lien FedaPay non genere\n\n";
-      msg += mailEnvoye ? "Mail envoye a " + client.email : "Mail non envoye";
-      if (urlBot)   msg += "\nURL bot : " + urlBot;
-      if (urlSheet) msg += "\nURL Sheets : " + urlSheet;
-      await send(chatId, msg);
-      return;
-    }
-
     // NOMBOT
     if (text.toLowerCase().startsWith("nombot ")) {
       const parts  = text.split(" ");
       const id     = parts[1]?.trim();
       const nomBot = parts.slice(2).join(" ").trim();
-      if (!id || !nomBot) { await send(chatId, "Format : nombot [ID] [nom du bot]\n\nEx: nombot MT-X7K2P MonSuperBot"); return; }
+      if (!id || !nomBot) { await send(chatId, "Format : nombot [ID] [nom du bot]"); return; }
       const result = await callSheet("update_nombot", { id_client: id, nom_bot: nomBot });
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
       await send(chatId, "Nom du bot mis a jour !\n\nID : " + id + "\nNom du bot : " + nomBot);
-      return;
-    }
-
-    // URLBOT
-    if (text.toLowerCase().startsWith("urlbot ")) {
-      const parts  = text.split(" ");
-      const id     = parts[1]?.trim();
-      const urlBot = parts[2]?.trim();
-      if (!id || !urlBot) { await send(chatId, "Format : urlbot [ID] [url]\n\nEx: urlbot MT-X7K2P https://t.me/MonBot"); return; }
-      const result = await callSheet("update_urlbot", { id_client: id, url_bot: urlBot });
-      if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
-      await send(chatId, "URL du bot enregistree !\n\nID : " + id + "\nURL : " + urlBot);
       return;
     }
 
@@ -666,7 +652,7 @@ app.post("/webhook", async (req, res) => {
       const parts       = text.split(" ");
       const id          = parts[1]?.trim();
       const description = parts.slice(2).join(" ").trim();
-      if (!id || !description) { await send(chatId, "Format : description [ID] [description]\n\nEx: description MT-X7K2P Vente chaussures, prix 5000-15000 FCFA"); return; }
+      if (!id || !description) { await send(chatId, "Format : description [ID] [description]"); return; }
       const result = await callSheet("update_description", { id_client: id, description });
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
       await send(chatId, "Description mise a jour !\n\nID : " + id + "\nDescription : " + description);
@@ -676,7 +662,7 @@ app.post("/webhook", async (req, res) => {
     // BOTS A IMPLEMENTER
     if (text.toLowerCase() === "bots" || text.toLowerCase().startsWith("bots ")) {
       const filtre = text.toLowerCase().replace("bots","").trim() || "tous";
-      const filtreMap = { "afaire":"afaire","a faire":"afaire","encours":"encours","en cours":"encours","livre":"livre","livres":"livre" };
+      const filtreMap = { "afaire":"afaire","a faire":"afaire","encours":"encours","en cours":"encours","livre":"livre" };
       const f = filtreMap[filtre] || "tous";
       const result = await callSheet("get_bots", { filtre: f });
       if (result.status !== "ok" || result.total === 0) { await send(chatId, "Aucun bot trouve."); return; }
@@ -725,7 +711,7 @@ app.post("/webhook", async (req, res) => {
       } else { await send(chatId, "Format :\nca mars\nca 2025\nca 01/01/2025 31/03/2025"); return; }
       const result = await callSheet("get_ca", { date_debut: debut, date_fin: fin });
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
-      let msg = "Chiffre d'Affaires\nPeriode : " + debut + " au " + fin + "\n-------------------\n";
+      let msg = "CA - " + debut + " au " + fin + "\n-------------------\n";
       msg += "CA Total : " + Number(result.ca_total).toLocaleString("fr-FR") + " FCFA\n";
       msg += "Nb paiements : " + result.nb_paiements + "\n\nPar pack :\n";
       for (const [pack, v] of Object.entries(result.par_pack || {})) {
@@ -776,35 +762,42 @@ app.post("/webhook", async (req, res) => {
   } catch(err) { console.error("Webhook:", err.message); }
 });
 
+// ── WEBHOOK FEDAPAY ───────────────────────────────────────────────────────────
 app.post("/paiement-confirme", async (req, res) => {
   res.sendStatus(200);
   try {
     const event = req.body;
     console.log("Webhook event name: " + event.name);
-    console.log("Webhook body keys: " + JSON.stringify(Object.keys(event)));
     if (event.name !== "transaction.approved") return;
     const transaction = event.entity;
-    console.log("Webhook transaction keys: " + JSON.stringify(Object.keys(transaction || {})));
     const ref = transaction.merchant_reference || "";
     console.log("Webhook FedaPay ref: " + ref);
-    console.log("Webhook transaction id: " + transaction.id);
     if (!ref.startsWith("MOHSBOT_")) { console.log("Ref ignoree: " + ref); return; }
+
     const segments = ref.split("_");
     const idClient = segments[1];
-    console.log("Webhook idClient: " + idClient);
-    const result = await callSheet("update_abonnement", { id_client: idClient, ref_paiement: transaction.id, moyen: "FedaPay" });
-    if (result.status === "ok") {
-      // Alerte Telegram admin
-      await send(ADMIN_CHAT_ID, "Paiement recu !\n\nNom : " + result.nom + "\nID : " + idClient + "\nMontant : " + Number(result.montant).toLocaleString("fr-FR") + " FCFA\nValide jusqu'au : " + result.nouvelle_fin);
+    const typePaie = ref.includes("-S") ? "SOLDE" : ref.includes("-R") ? "RENOUVELLEMENT" : "ACOMPTE";
+    console.log("Webhook idClient: " + idClient + " type: " + typePaie);
 
-      // Mail de confirmation au client
-      if (result.email) {
-        await envoyerMailSolde({
-          email: result.email, nom: result.nom, id: idClient,
-          pack: result.pack || "", montant: Number(result.montant) * 2,
-          solde: Number(result.montant),
-          lienPaiement: null, sujet: "confirmation"
-        });
+    const result = await callSheet("update_abonnement", { id_client: idClient, ref_paiement: transaction.id, moyen: "FedaPay" });
+
+    if (result.status === "ok") {
+      await send(ADMIN_CHAT_ID, "Paiement recu ! (" + typePaie + ")\n\nNom : " + result.nom + "\nID : " + idClient + "\nMontant : " + Number(result.montant).toLocaleString("fr-FR") + " FCFA\nValide jusqu'au : " + result.nouvelle_fin);
+
+      // Si c'est le SOLDE → livraison automatique
+      if (typePaie === "SOLDE") {
+        console.log("Solde paye - livraison automatique pour " + idClient);
+        const livraison = await callSheet("livrer", { id_client: idClient, nb_mois: 1 });
+        if (livraison.status === "ok" && livraison.email) {
+          await envoyerMailLivraison({
+            email: livraison.email, nom: livraison.nom, id: idClient,
+            pack: livraison.pack, montant: getPrixFromPack(livraison.pack, livraison.plateforme),
+            urlBot: livraison.url_bot || null,
+            urlSheet: livraison.url_sheet || null,
+            date_debut: livraison.date_debut, date_fin: livraison.date_fin
+          });
+          await send(ADMIN_CHAT_ID, "Bot livre automatiquement !\n\nNom : " + livraison.nom + "\nID : " + idClient + "\nDate debut : " + livraison.date_debut + "\nDate fin : " + livraison.date_fin);
+        }
       }
     }
   } catch(e) { console.error("FedaPay webhook:", e.message); }
