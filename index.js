@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbx5BEPrpnXv7u3Epz6Vg-LamCDjWr3FJ4kt5_PFqfe7BQjrw0BmNWcRTybgLaVqhHiZ/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbxVt_EHCWvSgFlZErI4sWwPV0DE3v6NBW2z-VcG0_mkDHpUyuHSS2gJFQydygx-Q_E/exec";
 const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
