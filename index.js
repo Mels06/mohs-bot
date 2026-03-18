@@ -108,7 +108,6 @@ function getPrixFromPack(pack, plateforme) {
   return 15000;
 }
 
-// ── FEDAPAY ───────────────────────────────────────────────────────────────────
 async function genererLienPaiement(reference, montant, nom, pack, email) {
   if (!FEDAPAY_API_KEY) { console.log("FEDAPAY_API_KEY manquante"); return null; }
   try {
@@ -127,14 +126,12 @@ async function genererLienPaiement(reference, montant, nom, pack, email) {
     console.log("FedaPay transaction ID: " + transaction.id);
     const token     = await transaction.generateToken();
     const tokenData = JSON.parse(JSON.stringify(token));
-    console.log("FedaPay token: " + JSON.stringify(tokenData));
     if (tokenData.url)   return tokenData.url;
     if (tokenData.token) return "https://process.fedapay.com/" + tokenData.token;
     return null;
   } catch(e) { console.error("FedaPay:", e.message); return null; }
 }
 
-// ── MAIL BIENVENUE ────────────────────────────────────────────────────────────
 async function envoyerMailBienvenue({ email, nom, id, pack, montant, plateforme, lienPaiement, acompte, solde }) {
   if (!RESEND_API_KEY) return false;
   const lienHtml = lienPaiement
@@ -188,7 +185,6 @@ async function envoyerMailBienvenue({ email, nom, id, pack, montant, plateforme,
   } catch(e) { console.error("Mail:", e.message); return false; }
 }
 
-// ── MAIL SOLDE ────────────────────────────────────────────────────────────────
 async function envoyerMailSolde({ email, nom, id, pack, montant, solde, lienPaiement }) {
   if (!RESEND_API_KEY) return false;
   const lienHtml = lienPaiement
@@ -233,7 +229,6 @@ async function envoyerMailSolde({ email, nom, id, pack, montant, solde, lienPaie
   } catch(e) { console.error("Mail solde:", e.message); return false; }
 }
 
-// ── MAIL LIVRAISON ────────────────────────────────────────────────────────────
 async function envoyerMailLivraison({ email, nom, id, pack, montant, urlBot, urlSheet, date_debut, date_fin }) {
   if (!RESEND_API_KEY) return false;
   const btnBot = urlBot
@@ -287,7 +282,6 @@ async function envoyerMailLivraison({ email, nom, id, pack, montant, urlBot, url
   } catch(e) { console.error("Mail livraison:", e.message); return false; }
 }
 
-// ── MAIL RENOUVELLEMENT ───────────────────────────────────────────────────────
 async function envoyerMailRenouvellement({ email, nom, id, pack, montant, lienPaiement }) {
   if (!RESEND_API_KEY) return false;
   const lienHtml = lienPaiement
@@ -351,7 +345,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // PACKS
     if (text.toLowerCase() === "packs") {
       let msg = "CATALOGUE MOHS TECHNOLOGIE\n\n";
       for (const [k, p] of Object.entries(PACKS)) {
@@ -363,7 +356,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // NOUVEAU CLIENT
     if (text.toLowerCase().startsWith("nouveau ")) {
       const rawText  = text.trim().substring(8).trim();
       const allWords = rawText.split(" ");
@@ -434,7 +426,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // TESTER
     if (text.toLowerCase().startsWith("tester ")) {
       const id = text.split(" ")[1]?.trim();
       if (!id) { await send(chatId, "Format : tester [ID]"); return; }
@@ -444,7 +435,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // SOLDE - envoie lien paiement + sauvegarde urls
     if (["solde","reste","restant","complement"].some(m => text.toLowerCase().startsWith(m + " "))) {
       const parts    = text.split(" ");
       const id       = parts[1]?.trim();
@@ -460,7 +450,6 @@ app.post("/webhook", async (req, res) => {
       const montant = getPrixFromPack(client.pack, client.plateforme);
       const solde   = Math.round(montant / 2);
 
-      // Sauvegarder URLs dans BOTS_A_IMPLEMENTER
       if (urlBot || urlSheet) {
         await callSheet("save_urlbot", { id_client: id, url_bot: urlBot || "", url_sheet: urlSheet || "" });
       }
@@ -481,13 +470,12 @@ app.post("/webhook", async (req, res) => {
       msg += "Solde : " + solde.toLocaleString("fr-FR") + " FCFA\n\n";
       msg += lienPaiement ? "Lien FedaPay :\n" + lienPaiement + "\n\n" : "Lien non genere\n\n";
       msg += mailEnvoye ? "Mail envoye a " + client.email : "Mail non envoye";
-      if (urlBot) msg += "\nURL bot sauvegardee";
+      if (urlBot)   msg += "\nURL bot sauvegardee";
       if (urlSheet) msg += "\nURL Sheets sauvegardee";
       await send(chatId, msg);
       return;
     }
 
-    // LIVRER - livraison manuelle sans paiement
     if (text.toLowerCase().startsWith("livrer ")) {
       const parts  = text.split(" ");
       const id     = parts[1]?.trim();
@@ -497,7 +485,6 @@ app.post("/webhook", async (req, res) => {
       await send(chatId, "Livraison du bot pour " + id + " en cours...");
 
       const result = await callSheet("livrer", { id_client: id, nb_mois: nbMois });
-      console.log("livrer result: " + JSON.stringify(result));
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
 
       if (result.email) {
@@ -521,7 +508,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // FICHE CLIENT
     if (["client","fiche","voir","chercher","trouver","info"].some(m => text.toLowerCase().startsWith(m + " ")) && !text.toLowerCase().startsWith("clients")) {
       const recherche = text.split(" ").slice(1).join(" ").trim();
       const result    = await callSheet("get_client", { id: recherche, telephone: recherche });
@@ -544,7 +530,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // LISTES SIMPLES
     if (["clients","actifs","expires","alerte"].includes(text.toLowerCase())) {
       const filtreMap = { "clients":"tous","actifs":"actifs","expires":"expires","alerte":"alerte" };
       const filtre = filtreMap[text.toLowerCase()];
@@ -561,7 +546,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // LISTE FILTREE
     if (text.toLowerCase().startsWith("liste ")) {
       const filtre = text.split(" ").slice(1).join(" ").trim().toLowerCase();
       const result = await callSheet("get_liste", { filtre });
@@ -575,7 +559,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // RENOUVELER
     if (["renouveler","renouvellement","reabonner","reabonnement","prolonger"].some(m => text.toLowerCase().startsWith(m + " "))) {
       const parts  = text.split(" ");
       const id     = parts[1]?.trim();
@@ -618,7 +601,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // SUSPENDRE
     if (["suspendre","suspension","bloquer","desactiver"].some(m => text.toLowerCase().startsWith(m + " "))) {
       const id = text.split(" ")[1]?.trim();
       const result = await callSheet("suspendre", { id_client: id });
@@ -627,7 +609,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // REACTIVER
     if (["reactiver","reactivation","activer","activation","debloquer"].some(m => text.toLowerCase().startsWith(m + " "))) {
       const id = text.split(" ")[1]?.trim();
       const result = await callSheet("reactiver", { id_client: id });
@@ -636,7 +617,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // NOMBOT
     if (text.toLowerCase().startsWith("nombot ")) {
       const parts  = text.split(" ");
       const id     = parts[1]?.trim();
@@ -648,7 +628,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // DESCRIPTION
     if (text.toLowerCase().startsWith("description ")) {
       const parts       = text.split(" ");
       const id          = parts[1]?.trim();
@@ -660,7 +639,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // BOTS A IMPLEMENTER
     if (text.toLowerCase() === "bots" || text.toLowerCase().startsWith("bots ")) {
       const filtre = text.toLowerCase().replace("bots","").trim() || "tous";
       const filtreMap = { "afaire":"afaire","a faire":"afaire","encours":"encours","en cours":"encours","livre":"livre" };
@@ -682,7 +660,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // BOT STATUT
     if (text.toLowerCase().startsWith("bot ")) {
       const parts  = text.split(" ");
       const action = parts[1]?.toLowerCase();
@@ -697,7 +674,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // CA
     if (text.toLowerCase().startsWith("ca ")) {
       const args = text.split(" ").slice(1);
       let debut = "", fin = "";
@@ -722,7 +698,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // COMMANDES
     if (text.toLowerCase().startsWith("commandes")) {
       const aujourdhui = text.toLowerCase().includes("aujourd");
       const result = await callSheet("get_commandes", { aujourd_hui: aujourdhui });
@@ -737,7 +712,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // STATS
     if (text.toLowerCase() === "stats") {
       const result = await callSheet("get_stats");
       if (result.status !== "ok") { await send(chatId, "Erreur stats."); return; }
@@ -754,7 +728,6 @@ app.post("/webhook", async (req, res) => {
       return;
     }
 
-    // CONVERSATION NATURELLE
     const intent = detectIntent(text);
     if (intent) { await send(chatId, repondreConversation(intent, prenom)); return; }
 
@@ -763,7 +736,6 @@ app.post("/webhook", async (req, res) => {
   } catch(err) { console.error("Webhook:", err.message); }
 });
 
-// ── WEBHOOK FEDAPAY ───────────────────────────────────────────────────────────
 app.post("/paiement-confirme", async (req, res) => {
   res.sendStatus(200);
   try {
@@ -775,9 +747,10 @@ app.post("/paiement-confirme", async (req, res) => {
     console.log("Webhook FedaPay ref: " + ref);
     if (!ref.startsWith("MOHSBOT_")) { console.log("Ref ignoree: " + ref); return; }
 
-    const segments = ref.split("_");
-    const idClient = segments[1];
-    const typePaie = ref.includes("-S") ? "SOLDE" : ref.includes("-R") ? "RENOUVELLEMENT" : "ACOMPTE";
+    const segments  = ref.split("_");
+    const rawId     = segments[1] || "";
+    const idClient  = rawId.replace(/-S$/, "").replace(/-R$/, "");
+    const typePaie  = rawId.endsWith("-S") ? "SOLDE" : rawId.endsWith("-R") ? "RENOUVELLEMENT" : "ACOMPTE";
     console.log("Webhook idClient: " + idClient + " type: " + typePaie);
 
     const result = await callSheet("update_abonnement", { id_client: idClient, ref_paiement: transaction.id, moyen: "FedaPay" });
@@ -785,7 +758,6 @@ app.post("/paiement-confirme", async (req, res) => {
     if (result.status === "ok") {
       await send(ADMIN_CHAT_ID, "Paiement recu ! (" + typePaie + ")\n\nNom : " + result.nom + "\nID : " + idClient + "\nMontant : " + Number(result.montant).toLocaleString("fr-FR") + " FCFA\nValide jusqu'au : " + result.nouvelle_fin);
 
-      // Si c'est le SOLDE → livraison automatique
       if (typePaie === "SOLDE") {
         console.log("Solde paye - livraison automatique pour " + idClient);
         const livraison = await callSheet("livrer", { id_client: idClient, nb_mois: 1 });
