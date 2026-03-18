@@ -108,6 +108,7 @@ async function genererLienPaiement(reference, montant, nom, pack, email) {
       description: "MOHS BOT - " + pack + " - " + nom,
       amount: montant,
       currency: { iso: "XOF" },
+      merchant_reference: "MOHSBOT_" + reference,
       customer: {
         firstname: nom,
         email: email && email.includes("@") ? email.trim() : "client@mohstechnologie.com"
