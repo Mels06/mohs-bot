@@ -904,10 +904,14 @@ app.post("/paiement-confirme", async (req, res) => {
   res.sendStatus(200);
   try {
     const event = req.body;
+    console.log("Webhook event name: " + event.name);
+    console.log("Webhook body keys: " + JSON.stringify(Object.keys(event)));
     if (event.name !== "transaction.approved") return;
     const transaction = event.entity;
+    console.log("Webhook transaction keys: " + JSON.stringify(Object.keys(transaction || {})));
     const ref = transaction.merchant_reference || "";
     console.log("Webhook FedaPay ref: " + ref);
+    console.log("Webhook transaction id: " + transaction.id);
     if (!ref.startsWith("MOHSBOT_")) { console.log("Ref ignoree: " + ref); return; }
     const segments = ref.split("_");
     const idClient = segments[1];
