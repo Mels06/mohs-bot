@@ -8,11 +8,12 @@ app.use(express.json());
 
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
 const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbw3FuDailGU7lF_ZaB795AOlV4w0wQFsUJU2e4llRYcbCny-zM0jeK-wp5NaHkoKFub/exec";
-const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
+const ADMIN_IDS = (process.env.ADMIN_CHAT_IDS || "8383314931,1110956209").split(",");
+const ADMIN_CHAT_ID   = "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
 
-function isAdmin(chatId) { return String(chatId) === String(ADMIN_CHAT_ID); }
+function isAdmin(chatId) { return ADMIN_IDS.includes(String(chatId)); }
 
 function genererID() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -428,6 +429,7 @@ app.post("/webhook", async (req, res) => {
         plateforme: plateforme.charAt(0).toUpperCase() + plateforme.slice(1),
         montant, nb_mois: nbMois
       });
+
 
       if (result.status !== "ok") { await send(chatId, "Erreur : " + result.message); return; }
 
