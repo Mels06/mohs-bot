@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbzV_MpQNqQoYj3detOOQ7rQLAEQhAXQjqAkoWdBX43z3eVBXmUg9hTddCJmvm95hWTt/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbw3FuDailGU7lF_ZaB795AOlV4w0wQFsUJU2e4llRYcbCny-zM0jeK-wp5NaHkoKFub/exec";
 const ADMIN_CHAT_ID   = process.env.ADMIN_CHAT_ID   || "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
@@ -135,7 +135,7 @@ async function genererLienPaiement(reference, montant, nom, pack, email) {
 async function envoyerMailBienvenue({ email, nom, id, pack, montant, plateforme, lienPaiement, acompte, solde }) {
   if (!RESEND_API_KEY) return false;
   const lienHtml = lienPaiement
-    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Payer mon acompte (' + Number(acompte).toLocaleString("fr-FR") + ' FCFA)</a></p>'
+    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:14px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block;max-width:80%;word-break:break-word;">Payer mon acompte (' + Number(acompte).toLocaleString("fr-FR") + ' FCFA)</a></p>'
     : '<p style="color:#888;font-size:13px;text-align:center;padding:10px;background:#f0f7ff;border-radius:8px;">Le lien de paiement vous sera envoye prochainement.</p>';
   const acompteHtml = acompte ? `
     <tr style="background:#e8f4fb;"><td style="padding:10px 15px;color:#2f74a3;font-weight:bold;border-bottom:1px solid #eee;">Acompte a payer (50%)</td>
@@ -232,10 +232,10 @@ async function envoyerMailSolde({ email, nom, id, pack, montant, solde, lienPaie
 async function envoyerMailLivraison({ email, nom, id, pack, montant, urlBot, urlSheet, date_debut, date_fin }) {
   if (!RESEND_API_KEY) return false;
   const btnBot = urlBot
-    ? '<p style="text-align:center;margin:10px 0;"><a href="' + urlBot + '" style="background:#1a1a2e;color:#2f74a3;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;border:2px solid #2f74a3;">Acceder a mon bot</a></p>'
+    ? '<p style="text-align:center;margin:15px 0 8px 0;"><a href="' + urlBot + '" style="background:#1a1a2e;color:#2f74a3;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;border:2px solid #2f74a3;">Acceder a mon bot</a></p>'
     : '';
   const btnSheet = urlSheet
-    ? '<p style="text-align:center;margin:10px 0;"><a href="' + urlSheet + '" style="background:#f0f7ff;color:#2f74a3;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;border:2px solid #2f74a3;">Mon tableau de bord</a></p>'
+    ? '<p style="text-align:center;margin:8px 0 15px 0;"><a href="' + urlSheet + '" style="background:#f0f7ff;color:#2f74a3;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;border:2px solid #2f74a3;">Mon tableau de bord</a></p>'
     : '';
   const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
   <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;">
@@ -372,7 +372,7 @@ app.post("/webhook", async (req, res) => {
           if (!val) continue;
           if (lower.includes("nom") || lower.includes("prenom"))             nom        = nom ? nom : val;
           if (lower.includes("entreprise") || lower.includes("societe") || lower.includes("structure")) entreprise = val;
-          if (lower.includes("telephone") || lower.includes("tel") || lower.includes("numero") || lower.includes("num\u00e9ro"))  telephone  = val.replace(/\s/g,"");
+          if (lower.includes("telephone") || lower.includes("t\u00e9l\u00e9phone") || lower.includes("tel") || lower.includes("numero") || lower.includes("num\u00e9ro"))  telephone  = val.replace(/\s/g,"");
           if (lower.includes("email") || lower.includes("mail") || lower.includes("e-mail"))            email      = val.trim();
           if (lower.includes("pack"))      { const m = val.match(/\d/); if (m) packNum = m[0]; }
           if (lower.includes("canal") || lower.includes("plateforme")) {
@@ -786,7 +786,7 @@ app.post("/paiement-confirme", async (req, res) => {
     const idClient  = rawId.replace(/_/g, "-"); // MT_XXXXX -> MT-XXXXX
     console.log("Webhook idClient: " + idClient + " type: " + typePaie);
 
-    const result = await callSheet("update_abonnement", { id_client: idClient, ref_paiement: transaction.id, moyen: "FedaPay" });
+    const result = await callSheet("update_abonnement", { id_client: idClient, ref_paiement: transaction.id, moyen: "FedaPay", montant_paye: transaction.amount });
 
     if (result.status === "ok") {
       await send(ADMIN_CHAT_ID, "Paiement recu ! (" + typePaie + ")\n\nNom : " + result.nom + "\nID : " + idClient + "\nMontant : " + Number(result.montant).toLocaleString("fr-FR") + " FCFA\nValide jusqu'au : " + result.nouvelle_fin);
