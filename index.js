@@ -9,7 +9,6 @@ app.use(express.json());
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
 const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbw3FuDailGU7lF_ZaB795AOlV4w0wQFsUJU2e4llRYcbCny-zM0jeK-wp5NaHkoKFub/exec";
 const ADMIN_IDS = (process.env.ADMIN_CHAT_IDS || "8383314931,1110956209").split(",");
-const ADMIN_CHAT_ID   = "8383314931";
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
 
@@ -97,6 +96,10 @@ async function send(chatId, text) {
       chat_id: chatId, text: text
     });
   } catch(e) { console.error("Telegram:", e.response?.data?.description || e.message); }
+}
+
+async function sendAdmins(text) {
+  for (const id of ADMIN_IDS) { await send(id, text); }
 }
 
 function getPrixFromPack(pack, plateforme) {
@@ -791,7 +794,7 @@ app.post("/paiement-confirme", async (req, res) => {
     const result = await callSheet("update_abonnement", { id_client: idClient, ref_paiement: transaction.id, moyen: "FedaPay", montant_paye: transaction.amount });
 
     if (result.status === "ok") {
-      await send(ADMIN_CHAT_ID, "Paiement recu ! (" + typePaie + ")\n\nNom : " + result.nom + "\nID : " + idClient + "\nMontant : " + Number(result.montant).toLocaleString("fr-FR") + " FCFA\nValide jusqu'au : " + result.nouvelle_fin);
+      await sendAdmins( "Paiement recu ! (" + typePaie + ")\n\nNom : " + result.nom + "\nID : " + idClient + "\nMontant : " + Number(result.montant).toLocaleString("fr-FR") + " FCFA\nValide jusqu'au : " + result.nouvelle_fin);
 
       if (typePaie === "SOLDE") {
         console.log("Solde paye - livraison automatique pour " + idClient);
@@ -804,7 +807,7 @@ app.post("/paiement-confirme", async (req, res) => {
             urlSheet: livraison.url_sheet || null,
             date_debut: livraison.date_debut, date_fin: livraison.date_fin
           });
-          await send(ADMIN_CHAT_ID, "Bot livre automatiquement !\n\nNom : " + livraison.nom + "\nID : " + idClient + "\nDate debut : " + livraison.date_debut + "\nDate fin : " + livraison.date_fin);
+          await sendAdmins( "Bot livre automatiquement !\n\nNom : " + livraison.nom + "\nID : " + idClient + "\nDate debut : " + livraison.date_debut + "\nDate fin : " + livraison.date_fin);
         }
       }
     }
@@ -817,10 +820,10 @@ async function checkExpirations() {
     if (result.status !== "ok") return;
     for (const a of result.alertes || []) {
       const urgence = a.jours === 1 ? "URGENT" : a.jours === 3 ? "ATTENTION" : "INFO";
-      await send(ADMIN_CHAT_ID, urgence + " - Expiration dans " + a.jours + " jour(s)\nNom : " + a.nom + "\nID : " + a.id + "\nPack : " + a.pack + "\nMontant : " + Number(a.montant).toLocaleString("fr-FR") + " FCFA\n\nAction : renouveler " + a.id);
+      await sendAdmins( urgence + " - Expiration dans " + a.jours + " jour(s)\nNom : " + a.nom + "\nID : " + a.id + "\nPack : " + a.pack + "\nMontant : " + Number(a.montant).toLocaleString("fr-FR") + " FCFA\n\nAction : renouveler " + a.id);
     }
     for (const e of result.expires || []) {
-      await send(ADMIN_CHAT_ID, "Abonnement expire\nNom : " + e.nom + "\nID : " + e.id + "\nPack : " + e.pack + "\nMontant : " + Number(e.montant).toLocaleString("fr-FR") + " FCFA\n\nAction : renouveler " + e.id);
+      await sendAdmins( "Abonnement expire\nNom : " + e.nom + "\nID : " + e.id + "\nPack : " + e.pack + "\nMontant : " + Number(e.montant).toLocaleString("fr-FR") + " FCFA\n\nAction : renouveler " + e.id);
     }
   } catch(e) { console.error("Scheduler:", e.message); }
 }
