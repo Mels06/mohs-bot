@@ -139,7 +139,7 @@ async function genererLienPaiement(reference, montant, nom, pack, email) {
 async function envoyerMailBienvenue({ email, nom, id, pack, montant, plateforme, lienPaiement, acompte, solde }) {
   if (!RESEND_API_KEY) return false;
   const lienHtml = lienPaiement
-    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:14px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block;max-width:80%;word-break:break-word;">Payer mon acompte (' + Number(acompte).toLocaleString("fr-FR") + ' FCFA)</a></p>'
+    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block;">Acompte ' + Number(acompte).toLocaleString("fr-FR") + ' FCFA</a></p>'
     : '<p style="color:#888;font-size:13px;text-align:center;padding:10px;background:#f0f7ff;border-radius:8px;">Le lien de paiement vous sera envoye prochainement.</p>';
   const acompteHtml = acompte ? `
     <tr style="background:#e8f4fb;"><td style="padding:10px 15px;color:#2f74a3;font-weight:bold;border-bottom:1px solid #eee;">Acompte a payer (50%)</td>
@@ -192,7 +192,7 @@ async function envoyerMailBienvenue({ email, nom, id, pack, montant, plateforme,
 async function envoyerMailSolde({ email, nom, id, pack, montant, solde, lienPaiement }) {
   if (!RESEND_API_KEY) return false;
   const lienHtml = lienPaiement
-    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Payer le solde (' + Number(solde).toLocaleString("fr-FR") + ' FCFA)</a></p>'
+    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block;">Payer le solde : ' + Number(solde).toLocaleString("fr-FR") + ' FCFA</a></p>'
     : '<p style="color:#888;font-size:13px;text-align:center;">Lien de paiement non disponible.</p>';
   const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
   <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;">
@@ -236,10 +236,10 @@ async function envoyerMailSolde({ email, nom, id, pack, montant, solde, lienPaie
 async function envoyerMailLivraison({ email, nom, id, pack, montant, urlBot, urlSheet, date_debut, date_fin }) {
   if (!RESEND_API_KEY) return false;
   const btnBot = urlBot
-    ? '<p style="text-align:center;margin:15px 0 8px 0;"><a href="' + urlBot + '" style="background:#1a1a2e;color:#2f74a3;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;border:2px solid #2f74a3;">Acceder a mon bot</a></p>'
+    ? '<p style="text-align:center;margin:20px 0 10px 0;"><a href="' + urlBot + '" style="background:#1a1a2e;color:#2f74a3;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;border:2px solid #2f74a3;display:inline-block;">Acceder a mon bot</a></p>'
     : '';
   const btnSheet = urlSheet
-    ? '<p style="text-align:center;margin:8px 0 15px 0;"><a href="' + urlSheet + '" style="background:#f0f7ff;color:#2f74a3;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;border:2px solid #2f74a3;">Mon tableau de bord</a></p>'
+    ? '<p style="text-align:center;margin:10px 0 20px 0;"><a href="' + urlSheet + '" style="background:#f0f7ff;color:#2f74a3;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;border:2px solid #2f74a3;display:inline-block;">Mon tableau de bord</a></p>'
     : '';
   const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
   <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;">
@@ -289,7 +289,7 @@ async function envoyerMailLivraison({ email, nom, id, pack, montant, urlBot, url
 async function envoyerMailRenouvellement({ email, nom, id, pack, montant, lienPaiement }) {
   if (!RESEND_API_KEY) return false;
   const lienHtml = lienPaiement
-    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">Renouveler mon abonnement (' + Number(montant).toLocaleString("fr-FR") + ' FCFA)</a></p>'
+    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block;">Renouveler : ' + Number(montant).toLocaleString("fr-FR") + ' FCFA</a></p>'
     : '';
   const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
   <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;">
