@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbw3FuDailGU7lF_ZaB795AOlV4w0wQFsUJU2e4llRYcbCny-zM0jeK-wp5NaHkoKFub/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbx5Q8psVCcEGNne93ZZj839D366zEMxQ4Bt5DWnX_CgRwqicGTnNMMRpidH9XqZqq_C/exec";
 const ADMIN_IDS = (process.env.ADMIN_CHAT_IDS || "8383314931,1110956209").split(",");
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
@@ -814,16 +814,98 @@ app.post("/paiement-confirme", async (req, res) => {
   } catch(e) { console.error("FedaPay webhook:", e.message); }
 });
 
+
+// ── MAIL RAPPEL EXPIRATION ────────────────────────────────────────────────────
+async function envoyerMailRappel({ email, nom, id, pack, montant, jours, lienPaiement }) {
+  if (!RESEND_API_KEY) return false;
+  const urgence  = jours === 1 ? "URGENT" : jours === 3 ? "Attention" : "Information";
+  const couleur  = jours === 1 ? "#e74c3c" : jours === 3 ? "#e67e22" : "#2f74a3";
+  const lienHtml = lienPaiement
+    ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block;">Renouveler mon abonnement</a></p>'
+    : '<p style="color:#555;font-size:14px;text-align:center;">Contactez-nous : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>';
+  const html = `<!DOCTYPE html><html><body style="font-family:Arial;background:#f4f4f4;padding:40px 0;">
+  <table width="600" style="margin:auto;background:#fff;border-radius:12px;overflow:hidden;">
+    <tr><td style="background:#1a1a2e;padding:30px;text-align:center;">
+      <h1 style="color:#2f74a3;margin:0;">MOHS TECHNOLOGIE</h1>
+      <p style="color:#aaa;margin:5px 0 0;font-size:13px;">Solutions Digitales et Bots Intelligents</p>
+    </td></tr>
+    <tr><td style="padding:30px;">
+      <div style="background:${couleur};color:#fff;padding:12px 20px;border-radius:8px;text-align:center;font-weight:bold;font-size:16px;margin-bottom:20px;">
+        ${urgence} - Votre abonnement expire dans ${jours} jour(s)
+      </div>
+      <p style="color:#555;">Bonjour ${nom},</p>
+      <p style="color:#555;">Votre abonnement <strong>${pack}</strong> arrive a expiration. Renouvelez maintenant pour continuer a beneficier de votre bot sans interruption.</p>
+      <table width="100%" style="border:1px solid #eee;border-radius:8px;overflow:hidden;margin:20px 0;">
+        <tr style="background:#1a1a2e;"><td colspan="2" style="padding:12px 15px;color:#2f74a3;font-weight:bold;">VOTRE ABONNEMENT</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;width:45%;">ID Client</td>
+            <td style="padding:12px 15px;border-bottom:1px solid #eee;"><span style="background:#1a1a2e;color:#2f74a3;padding:4px 12px;border-radius:15px;font-family:monospace;font-weight:bold;">${id}</span></td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Pack</td>
+            <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${pack}</td></tr>
+        <tr style="background:#e8f4fb;"><td style="padding:12px 15px;color:${couleur};font-weight:bold;">Expire dans</td>
+            <td style="padding:12px 15px;color:${couleur};font-weight:bold;font-size:18px;">${jours} jour(s)</td></tr>
+        <tr><td style="padding:12px 15px;color:#888;">Montant renouvellement</td>
+            <td style="padding:12px 15px;font-weight:bold;">${Number(montant).toLocaleString("fr-FR")} FCFA</td></tr>
+      </table>
+      ${lienHtml}
+      <p style="color:#555;font-size:14px;">Contact : <a href="mailto:contact@mohstechnologie.com" style="color:#2f74a3;">contact@mohstechnologie.com</a></p>
+    </td></tr>
+    <tr><td style="background:#1a1a2e;padding:20px;text-align:center;">
+      <p style="color:#2f74a3;margin:0;font-weight:bold;">MOHS TECHNOLOGIE</p>
+      <p style="color:#666;margin:5px 0 0;font-size:12px;">contact@mohstechnologie.com</p>
+    </td></tr>
+  </table>
+</body></html>`;
+  try {
+    const sujet = jours === 1 ? "URGENT - Votre abonnement expire demain !" : jours === 3 ? "Votre abonnement expire dans 3 jours" : "Rappel - Votre abonnement expire dans 7 jours";
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: "MOHS TECHNOLOGIE <contact@mohstechnologie.com>", to: [email], subject: sujet + " - MOHS TECHNOLOGIE", html })
+    });
+    const data = await res.json();
+    if (data.id) { console.log("Mail rappel J-" + jours + " envoye a " + email); return true; }
+    console.error("Resend rappel:", JSON.stringify(data)); return false;
+  } catch(e) { console.error("Mail rappel:", e.message); return false; }
+}
+
 async function checkExpirations() {
   try {
     const result = await callSheet("expire_check");
     if (result.status !== "ok") return;
+
     for (const a of result.alertes || []) {
       const urgence = a.jours === 1 ? "URGENT" : a.jours === 3 ? "ATTENTION" : "INFO";
-      await sendAdmins( urgence + " - Expiration dans " + a.jours + " jour(s)\nNom : " + a.nom + "\nID : " + a.id + "\nPack : " + a.pack + "\nMontant : " + Number(a.montant).toLocaleString("fr-FR") + " FCFA\n\nAction : renouveler " + a.id);
+
+      // Alerte admins
+      await sendAdmins(urgence + " - Expiration dans " + a.jours + " jour(s)\nNom : " + a.nom + "\nID : " + a.id + "\nPack : " + a.pack + "\nMontant : " + Number(a.montant).toLocaleString("fr-FR") + " FCFA\n\nAction : renouveler " + a.id);
+
+      // Mail rappel au client
+      if (a.email) {
+        const lienRenouvellement = FEDAPAY_API_KEY ? await genererLienPaiement(a.id + "-R", Number(a.montant), a.nom, a.pack, a.email) : null;
+        await envoyerMailRappel({ email: a.email, nom: a.nom, id: a.id, pack: a.pack, montant: a.montant, jours: a.jours, lienPaiement: lienRenouvellement });
+      }
+
+      // Message via bot client si chat_id et bot_token disponibles
+      if (a.chat_id && a.bot_token) {
+        const msg = (a.jours === 1 ? "URGENT" : a.jours === 3 ? "⚠️" : "ℹ️") + " Votre abonnement expire dans " + a.jours + " jour(s) !\n\nPack : " + a.pack + "\n\nPour renouveler, contactez MOHS TECHNOLOGIE :\ncontact@mohstechnologie.com";
+        try {
+          await axios.post("https://api.telegram.org/bot" + a.bot_token + "/sendMessage", { chat_id: a.chat_id, text: msg });
+          console.log("Message rappel envoye au client " + a.id);
+        } catch(err) { console.error("Bot client rappel:", err.message); }
+      }
     }
+
     for (const e of result.expires || []) {
-      await sendAdmins( "Abonnement expire\nNom : " + e.nom + "\nID : " + e.id + "\nPack : " + e.pack + "\nMontant : " + Number(e.montant).toLocaleString("fr-FR") + " FCFA\n\nAction : renouveler " + e.id);
+      // Alerte admins
+      await sendAdmins("Abonnement expire\nNom : " + e.nom + "\nID : " + e.id + "\nPack : " + e.pack + "\nMontant : " + Number(e.montant).toLocaleString("fr-FR") + " FCFA\n\nAction : renouveler " + e.id);
+
+      // Message via bot client
+      if (e.chat_id && e.bot_token) {
+        const msg = "Votre abonnement est expire !\n\nPack : " + e.pack + "\n\nContactez MOHS TECHNOLOGIE pour renouveler :\ncontact@mohstechnologie.com";
+        try {
+          await axios.post("https://api.telegram.org/bot" + e.bot_token + "/sendMessage", { chat_id: e.chat_id, text: msg });
+        } catch(err) { console.error("Bot client expire:", err.message); }
+      }
     }
   } catch(e) { console.error("Scheduler:", e.message); }
 }
