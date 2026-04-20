@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbx5Q8psVCcEGNne93ZZj839D366zEMxQ4Bt5DWnX_CgRwqicGTnNMMRpidH9XqZqq_C/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbyhSZrs-NYrohJ_RbDSruvErMEuySMFPzuoTq18FnH-3n8IDIJQ5oUgp_Yxmd5ZAn4k/exec";
 const ADMIN_IDS = (process.env.ADMIN_CHAT_IDS || "8383314931,1110956209").split(",");
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
@@ -22,11 +22,13 @@ function genererID() {
 }
 
 const PACKS = {
-  "1": { nom: "Pack 1 - Essentiel",  telegram: 15000, whatsapp: 30000 },
-  "2": { nom: "Pack 2 - Avancee",    telegram: 20000, whatsapp: 40000 },
-  "3": { nom: "Pack 3 - Assistant",  telegram: 25000, whatsapp: 50000 },
-  "4": { nom: "Pack 4 - Commercial", telegram: 35000, whatsapp: 100000 },
+  "1": { nom: "Pack 1 - Essentiel",  telegram: 10000, whatsapp: 20000, whatsapp_sms: 25 },
+  "2": { nom: "Pack 2 - Avancee",    telegram: 15000, whatsapp: 30000, whatsapp_sms: 25 },
+  "3": { nom: "Pack 3 - Assistant",  telegram: 20000, whatsapp: 40000, whatsapp_sms: 25 },
+  "4": { nom: "Pack 4 - Commercial", telegram: 25000, whatsapp: 50000, whatsapp_sms: 25 },
 };
+
+const PROMO_PREMIER_MOIS = 0.50; // 50% de reduction sur le premier mois
 
 const MOIS = {
   "janvier":1,"fevrier":2,"mars":3,"avril":4,"mai":5,"juin":6,
@@ -105,11 +107,11 @@ async function sendAdmins(text) {
 function getPrixFromPack(pack, plateforme) {
   const p  = String(pack||"").toLowerCase();
   const pl = String(plateforme||"telegram").toLowerCase();
-  if (p.includes("1") || p.includes("essentiel"))  return pl.includes("whatsapp") ? 30000 : 15000;
-  if (p.includes("2") || p.includes("avanc"))      return pl.includes("whatsapp") ? 40000 : 20000;
-  if (p.includes("3") || p.includes("assistant"))  return pl.includes("whatsapp") ? 50000 : 25000;
-  if (p.includes("4") || p.includes("commercial")) return pl.includes("whatsapp") ? 100000 : 35000;
-  return 15000;
+  if (p.includes("1") || p.includes("essentiel"))  return pl.includes("whatsapp") ? 20000 : 10000;
+  if (p.includes("2") || p.includes("avanc"))      return pl.includes("whatsapp") ? 30000 : 15000;
+  if (p.includes("3") || p.includes("assistant"))  return pl.includes("whatsapp") ? 40000 : 20000;
+  if (p.includes("4") || p.includes("commercial")) return pl.includes("whatsapp") ? 50000 : 25000;
+  return 10000;
 }
 
 async function genererLienPaiement(reference, montant, nom, pack, email) {
@@ -351,10 +353,13 @@ app.post("/webhook", async (req, res) => {
 
     if (text.toLowerCase() === "packs") {
       let msg = "CATALOGUE MOHS TECHNOLOGIE\n\n";
+      msg += "PROMO : -50% sur le 1er mois !\n\n";
       for (const [k, p] of Object.entries(PACKS)) {
-        msg += "Pack " + k + " - " + p.nom + "\n";
-        msg += "  Telegram : " + p.telegram.toLocaleString("fr-FR") + " FCFA/mois\n";
-        msg += "  WhatsApp : " + p.whatsapp.toLocaleString("fr-FR") + " FCFA/mois\n\n";
+        const telegramPromo = Math.round(p.telegram * (1 - PROMO_PREMIER_MOIS));
+        const whatsappPromo = Math.round(p.whatsapp * (1 - PROMO_PREMIER_MOIS));
+        msg += p.nom + "\n";
+        msg += "  Telegram : " + telegramPromo.toLocaleString("fr-FR") + " FCFA/mois (au lieu de " + p.telegram.toLocaleString("fr-FR") + ")\n";
+        msg += "  WhatsApp : " + whatsappPromo.toLocaleString("fr-FR") + " FCFA/mois + 25 FCFA/msg\n\n";
       }
       await send(chatId, msg);
       return;
@@ -418,11 +423,12 @@ app.post("/webhook", async (req, res) => {
       const packInfo = PACKS[packNum];
       if (!packInfo)  { await send(chatId, "Pack invalide. Tape 'packs'."); return; }
 
-      const idClient     = genererID();
-      const montant      = plateforme.toLowerCase() === "whatsapp" ? packInfo.whatsapp : packInfo.telegram;
-      const montantTotal = montant * nbMois;
-      const acompte      = Math.round(montantTotal / 2);
-      const solde        = montantTotal - acompte;
+      const idClient       = genererID();
+      const montantNormal  = plateforme.toLowerCase() === "whatsapp" ? packInfo.whatsapp : packInfo.telegram;
+      const montant        = Math.round(montantNormal * (1 - PROMO_PREMIER_MOIS)); // 50% promo premier mois
+      const montantTotal   = montant * nbMois;
+      const acompte        = Math.round(montantTotal / 2);
+      const solde          = montantTotal - acompte;
 
       await send(chatId, "Enregistrement de " + nom + " en cours...");
 
@@ -455,8 +461,13 @@ app.post("/webhook", async (req, res) => {
       msg += "Email : " + email + "\n";
       msg += "Pack : " + packInfo.nom + "\n";
       msg += "Plateforme : " + plateforme + "\n";
-      msg += "Acompte (50%) : " + acompte.toLocaleString("fr-FR") + " FCFA\n";
-      msg += "Solde restant : " + solde.toLocaleString("fr-FR") + " FCFA\n\n";
+      if (PROMO_50) {
+        msg += "Prix normal : " + montantTotal.toLocaleString("fr-FR") + " FCFA\n";
+        msg += "PROMO 50% : " + prixPromo.toLocaleString("fr-FR") + " FCFA (paiement unique)\n\n";
+      } else {
+        msg += "Acompte (50%) : " + acompte.toLocaleString("fr-FR") + " FCFA\n";
+        msg += "Solde restant : " + solde.toLocaleString("fr-FR") + " FCFA\n\n";
+      }
       msg += lienPaiement ? "Lien acompte :\n" + lienPaiement + "\n\n" : "Lien FedaPay non genere\n";
       msg += mailEnvoye ? "Mail envoye a " + email : "Mail non envoye";
       await send(chatId, msg);
