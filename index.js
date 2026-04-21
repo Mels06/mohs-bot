@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 
 const TELEGRAM_TOKEN  = process.env.TELEGRAM_TOKEN  || "8629289546:AAHn6D-jFGQw2mJzX_JzMECbTaBkP-R5B-E";
-const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbyhSZrs-NYrohJ_RbDSruvErMEuySMFPzuoTq18FnH-3n8IDIJQ5oUgp_Yxmd5ZAn4k/exec";
+const SCRIPT_URL      = process.env.SCRIPT_URL      || "https://script.google.com/macros/s/AKfycbzV_MpQNqQoYj3detOOQ7rQLAEQhAXQjqAkoWdBX43z3eVBXmUg9hTddCJmvm95hWTt/exec";
 const ADMIN_IDS = (process.env.ADMIN_CHAT_IDS || "8383314931,1110956209").split(",");
 const FEDAPAY_API_KEY = process.env.FEDAPAY_API_KEY || "";
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || "";
@@ -28,7 +28,7 @@ const PACKS = {
   "4": { nom: "Pack 4 - Commercial", telegram: 25000, whatsapp: 50000, whatsapp_sms: 25 },
 };
 
-const PROMO_PREMIER_MOIS = 0.50; // 50% de reduction sur le premier mois
+const PROMO_50 = true; // Promotion 50% sur le premier abonnement - false pour desactiver
 
 const MOIS = {
   "janvier":1,"fevrier":2,"mars":3,"avril":4,"mai":5,"juin":6,
@@ -143,7 +143,12 @@ async function envoyerMailBienvenue({ email, nom, id, pack, montant, plateforme,
   const lienHtml = lienPaiement
     ? '<p style="text-align:center;margin:30px 0;"><a href="' + lienPaiement + '" style="background:#2f74a3;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block;">Acompte ' + Number(acompte).toLocaleString("fr-FR") + ' FCFA</a></p>'
     : '<p style="color:#888;font-size:13px;text-align:center;padding:10px;background:#f0f7ff;border-radius:8px;">Le lien de paiement vous sera envoye prochainement.</p>';
-  const acompteHtml = acompte ? `
+  const promoHtml = solde === 0 ? `
+    <tr style="background:#e8f4fb;"><td style="padding:10px 15px;color:#2f74a3;font-weight:bold;border-bottom:1px solid #eee;">PROMO -50% (1er mois)</td>
+        <td style="padding:10px 15px;color:#2f74a3;font-weight:bold;font-size:16px;border-bottom:1px solid #eee;">${Number(acompte).toLocaleString("fr-FR")} FCFA</td></tr>
+    <tr><td style="padding:10px 15px;color:#27ae60;font-weight:bold;border-bottom:1px solid #eee;">Economie realisee</td>
+        <td style="padding:10px 15px;color:#27ae60;font-weight:bold;border-bottom:1px solid #eee;">${Number(acompte).toLocaleString("fr-FR")} FCFA</td></tr>` : "";
+  const acompteHtml = solde > 0 && acompte ? `
     <tr style="background:#e8f4fb;"><td style="padding:10px 15px;color:#2f74a3;font-weight:bold;border-bottom:1px solid #eee;">Acompte a payer (50%)</td>
         <td style="padding:10px 15px;color:#2f74a3;font-weight:bold;font-size:16px;border-bottom:1px solid #eee;">${Number(acompte).toLocaleString("fr-FR")} FCFA</td></tr>
     <tr><td style="padding:10px 15px;color:#888;border-bottom:1px solid #eee;">Solde restant</td>
@@ -167,6 +172,7 @@ async function envoyerMailBienvenue({ email, nom, id, pack, montant, plateforme,
             <td style="padding:12px 15px;border-bottom:1px solid #eee;">${plateforme}</td></tr>
         <tr style="background:#f9f9f9;"><td style="padding:12px 15px;color:#888;border-bottom:1px solid #eee;">Montant mensuel</td>
             <td style="padding:12px 15px;font-weight:bold;border-bottom:1px solid #eee;">${Number(montant).toLocaleString("fr-FR")} FCFA</td></tr>
+        ${promoHtml}
         ${acompteHtml}
       </table>
       ${lienHtml}
@@ -355,8 +361,8 @@ app.post("/webhook", async (req, res) => {
       let msg = "CATALOGUE MOHS TECHNOLOGIE\n\n";
       msg += "PROMO : -50% sur le 1er mois !\n\n";
       for (const [k, p] of Object.entries(PACKS)) {
-        const telegramPromo = Math.round(p.telegram * (1 - PROMO_PREMIER_MOIS));
-        const whatsappPromo = Math.round(p.whatsapp * (1 - PROMO_PREMIER_MOIS));
+        const telegramPromo = Math.round(p.telegram / 2);
+        const whatsappPromo = Math.round(p.whatsapp / 2);
         msg += p.nom + "\n";
         msg += "  Telegram : " + telegramPromo.toLocaleString("fr-FR") + " FCFA/mois (au lieu de " + p.telegram.toLocaleString("fr-FR") + ")\n";
         msg += "  WhatsApp : " + whatsappPromo.toLocaleString("fr-FR") + " FCFA/mois + 25 FCFA/msg\n\n";
@@ -425,7 +431,7 @@ app.post("/webhook", async (req, res) => {
 
       const idClient       = genererID();
       const montantNormal  = plateforme.toLowerCase() === "whatsapp" ? packInfo.whatsapp : packInfo.telegram;
-      const montant        = Math.round(montantNormal * (1 - PROMO_PREMIER_MOIS)); // 50% promo premier mois
+      const montant        = PROMO_50 ? Math.round(montantNormal / 2) : montantNormal;
       const montantTotal   = montant * nbMois;
       const acompte        = Math.round(montantTotal / 2);
       const solde          = montantTotal - acompte;
@@ -444,7 +450,9 @@ app.post("/webhook", async (req, res) => {
 
       let lienPaiement = null;
       if (FEDAPAY_API_KEY) {
-        lienPaiement = await genererLienPaiement(idClient, acompte, nom, packInfo.nom, email);
+        // Promo = paiement unique avec suffix -P pour livraison automatique
+        const refPaiement = PROMO_50 ? idClient + "-P" : idClient;
+        lienPaiement = await genererLienPaiement(refPaiement, acompte, nom, packInfo.nom, email);
       }
 
       const mailEnvoye = await envoyerMailBienvenue({
@@ -797,7 +805,7 @@ app.post("/paiement-confirme", async (req, res) => {
 
     // ref format: MOHSBOT_MT_XXXXX_S ou MOHSBOT_MT_XXXXX_R ou MOHSBOT_MT_XXXXX
     const refClean  = ref.replace("MOHSBOT_", "");
-    const typePaie  = refClean.endsWith("_S") ? "SOLDE" : refClean.endsWith("_R") ? "RENOUVELLEMENT" : "ACOMPTE";
+    const typePaie  = refClean.endsWith("_S") ? "SOLDE" : refClean.endsWith("_R") ? "RENOUVELLEMENT" : refClean.endsWith("_P") ? "PROMO" : "ACOMPTE";
     const rawId     = typePaie !== "ACOMPTE" ? refClean.slice(0, -2) : refClean;
     const idClient  = rawId.replace(/_/g, "-"); // MT_XXXXX -> MT-XXXXX
     console.log("Webhook idClient: " + idClient + " type: " + typePaie);
