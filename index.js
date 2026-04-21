@@ -429,12 +429,14 @@ app.post("/webhook", async (req, res) => {
       const packInfo = PACKS[packNum];
       if (!packInfo)  { await send(chatId, "Pack invalide. Tape 'packs'."); return; }
 
-      const idClient       = genererID();
-      const montantNormal  = plateforme.toLowerCase() === "whatsapp" ? packInfo.whatsapp : packInfo.telegram;
-      const montant        = PROMO_50 ? Math.round(montantNormal / 2) : montantNormal;
-      const montantTotal   = montant * nbMois;
-      const acompte        = Math.round(montantTotal / 2);
-      const solde          = montantTotal - acompte;
+      const idClient      = genererID();
+      const montantNormal = plateforme.toLowerCase() === "whatsapp" ? packInfo.whatsapp : packInfo.telegram;
+      const montantTotal  = montantNormal * nbMois;
+      // Promo 50% = paiement unique au prix reduit, pas d'acompte/solde
+      const prixPromo     = PROMO_50 ? Math.round(montantTotal / 2) : montantTotal;
+      const acompte       = PROMO_50 ? prixPromo : Math.round(montantTotal / 2);
+      const solde         = PROMO_50 ? 0 : montantTotal - acompte;
+      const montant       = PROMO_50 ? prixPromo : montantNormal;
 
       await send(chatId, "Enregistrement de " + nom + " en cours...");
 
@@ -450,9 +452,10 @@ app.post("/webhook", async (req, res) => {
 
       let lienPaiement = null;
       if (FEDAPAY_API_KEY) {
-        // Promo = paiement unique avec suffix -P pour livraison automatique
-        const refPaiement = PROMO_50 ? idClient + "-P" : idClient;
-        lienPaiement = await genererLienPaiement(refPaiement, acompte, nom, packInfo.nom, email);
+        // Promo = paiement unique avec suffix -P
+        const refPaiement  = PROMO_50 ? idClient + "-P" : idClient;
+        const montantLien  = PROMO_50 ? prixPromo : acompte;
+        lienPaiement = await genererLienPaiement(refPaiement, montantLien, nom, packInfo.nom, email);
       }
 
       const mailEnvoye = await envoyerMailBienvenue({
@@ -471,12 +474,13 @@ app.post("/webhook", async (req, res) => {
       msg += "Plateforme : " + plateforme + "\n";
       if (PROMO_50) {
         msg += "Prix normal : " + montantTotal.toLocaleString("fr-FR") + " FCFA\n";
-        msg += "PROMO 50% : " + prixPromo.toLocaleString("fr-FR") + " FCFA (paiement unique)\n\n";
+        msg += "PROMO -50% : " + prixPromo.toLocaleString("fr-FR") + " FCFA (paiement unique)\n\n";
+        msg += lienPaiement ? "Lien paiement promo :\n" + lienPaiement + "\n\n" : "Lien FedaPay non genere\n";
       } else {
         msg += "Acompte (50%) : " + acompte.toLocaleString("fr-FR") + " FCFA\n";
         msg += "Solde restant : " + solde.toLocaleString("fr-FR") + " FCFA\n\n";
+        msg += lienPaiement ? "Lien acompte :\n" + lienPaiement + "\n\n" : "Lien FedaPay non genere\n";
       }
-      msg += lienPaiement ? "Lien acompte :\n" + lienPaiement + "\n\n" : "Lien FedaPay non genere\n";
       msg += mailEnvoye ? "Mail envoye a " + email : "Mail non envoye";
       await send(chatId, msg);
       return;
